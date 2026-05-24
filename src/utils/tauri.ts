@@ -61,6 +61,14 @@ export type FileContext = {
   cachePath?: string | null;
 };
 
+export type UpdateStatus = {
+  currentVersion: string;
+  latestVersion?: string | null;
+  updateAvailable: boolean;
+  releaseUrl?: string | null;
+  message: string;
+};
+
 export async function getDesktopSessionType(): Promise<string> {
   if (!isTauriRuntime()) {
     return "browser-preview";
@@ -184,6 +192,20 @@ export async function addFileContext(): Promise<FileContext> {
   }
 
   return invoke<FileContext>("add_file_context");
+}
+
+export async function checkForUpdates(): Promise<UpdateStatus> {
+  if (!isTauriRuntime()) {
+    return {
+      currentVersion: "0.1.0",
+      latestVersion: null,
+      updateAvailable: false,
+      releaseUrl: null,
+      message: "Browser-Vorschau kann GitHub Releases nicht nativ pruefen.",
+    };
+  }
+
+  return invoke<UpdateStatus>("check_for_updates");
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {

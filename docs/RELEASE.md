@@ -35,3 +35,10 @@ Initial strategy:
 - Open download link.
 
 Fully automatic updates should only be added when signing and rollback behavior are clear.
+
+## Current Phase 11 Status
+
+- Settings can check the latest GitHub Release.
+- If no release exists, the app reports that clearly.
+- No automatic download or install is performed.
+- Automatic updates remain blocked until release signing and rollback behavior are defined.

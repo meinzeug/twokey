@@ -12,6 +12,7 @@ mod ollama;
 mod provider;
 mod settings;
 mod stt;
+mod updater;
 
 #[tauri::command]
 fn get_desktop_session_type() -> String {
@@ -79,6 +80,11 @@ fn add_file_context() -> Result<file_context::FileContext, String> {
     file_context::pick_and_load()
 }
 
+#[tauri::command]
+fn check_for_updates() -> Result<updater::UpdateStatus, String> {
+    updater::check()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
@@ -90,6 +96,7 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             add_file_context,
             ask_ollama,
+            check_for_updates,
             get_desktop_capabilities,
             get_desktop_session_type,
             get_settings,

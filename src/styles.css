@@ -489,6 +489,27 @@ p {
   line-height: 1.35;
 }
 
+.update-check {
+  display: grid;
+  gap: 8px;
+}
+
+.update-check button {
+  min-height: 36px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #f5f7fb;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.update-check span {
+  color: #96a4b6;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .settings-shell.loading {
   display: grid;
   place-items: center;

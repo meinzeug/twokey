@@ -15,6 +15,7 @@ import {
 import {
   askOllama,
   addFileContext,
+  checkForUpdates,
   getDesktopCapabilities,
   getSettings,
   insertText,
@@ -452,6 +453,7 @@ function SettingsWindow() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [saveState, setSaveState] = useState("Bereit");
+  const [updateState, setUpdateState] = useState("Nicht geprueft");
   const settingsSections = [
     "Allgemein",
     "Hotkeys",
@@ -614,6 +616,20 @@ function SettingsWindow() {
                 <option value="dev">dev</option>
               </select>
             </label>
+            <div className="update-check">
+              <button
+                type="button"
+                onClick={() => {
+                  setUpdateState("Pruefe...");
+                  checkForUpdates()
+                    .then((status) => setUpdateState(status.message))
+                    .catch((error: unknown) => setUpdateState(error instanceof Error ? error.message : String(error)));
+                }}
+              >
+                Nach Updates suchen
+              </button>
+              <span>{updateState}</span>
+            </div>
           </SettingsGroup>
         </div>
       </section>

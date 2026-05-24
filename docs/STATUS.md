@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 10: Packaging.
+Phase 11: Auto-Update.
 
 ## Completed
 
@@ -51,6 +51,8 @@ Phase 10: Packaging.
 - Extracted file text is cached under `~/.cache/twokey-ai/file-contexts/`.
 - AppImage and `.deb` bundle generation remains verified.
 - Autostart setting writes/removes `~/.config/autostart/twokey-ai.desktop`.
+- Settings can check GitHub Releases for a newer version.
+- Update checks do not auto-download or auto-install.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -82,14 +84,16 @@ Phase 10: Packaging.
 - Office files are not supported yet.
 - Image files are not analyzed until a vision provider is active.
 - Tray icon is still not implemented.
+- Release signing and rollback strategy are not defined, so automatic updates are intentionally not implemented.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 11: Auto-Update.
+Phase 12: Stabilisierung.
 
-Planned Phase 11 work:
+Planned Phase 12 work:
 
-- Check GitHub Releases for newer versions.
-- Show update availability in settings.
-- Keep downloads/manual install explicit before adding automatic updates.
+- Clean up warnings and UX copy.
+- Run full build and smoke tests.
+- Update docs with final current-state summary.
+- Leave clear known limitations for Wayland, STT, TTS, tray, and online providers.

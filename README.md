@@ -122,6 +122,11 @@ Phase 10 packaging behavior:
 - Settings autostart writes `~/.config/autostart/twokey-ai.desktop`.
 - Generated bundles live under `src-tauri/target/release/bundle/`.
 
+Phase 11 update behavior:
+
+- Settings can check GitHub Releases for a newer version.
+- The app only reports availability; it does not auto-download or auto-install.
+
 Build the frontend:
 
 ```bash
