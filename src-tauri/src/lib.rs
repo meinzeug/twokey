@@ -34,6 +34,18 @@ struct UiHotkeyEvent {
     provider: Option<String>,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+struct RuntimeDiagnostics {
+    desktop: hotkeys::DesktopCapabilities,
+    whisper: stt::LocalWhisperDiagnostics,
+    tts: tts::TtsDiagnostics,
+    providers: Vec<provider::ProviderInfo>,
+    stt_provider: String,
+    chat_provider: String,
+    recent_failures: Vec<history::HistoryEntry>,
+}
+
 #[tauri::command]
 fn get_desktop_session_type() -> String {
     std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string())
@@ -211,6 +223,37 @@ fn run_toolchain_from_text(text: String) -> Result<Option<String>, String> {
 }
 
 #[tauri::command]
+fn list_toolchains() -> Result<Vec<toolchains::Toolchain>, String> {
+    toolchains::load_toolchains()
+}
+
+#[tauri::command]
+fn save_toolchains(toolchains: Vec<toolchains::Toolchain>) -> Result<(), String> {
+    toolchains::save_toolchains(&toolchains)
+}
+
+#[tauri::command]
+fn get_runtime_diagnostics() -> RuntimeDiagnostics {
+    let app_settings = settings::load().unwrap_or_default();
+    let recent_failures = history::list_recent(100)
+        .unwrap_or_default()
+        .into_iter()
+        .filter(|entry| !entry.success)
+        .take(10)
+        .collect::<Vec<_>>();
+
+    RuntimeDiagnostics {
+        desktop: hotkeys::capabilities(),
+        whisper: stt::local_whisper_diagnostics(),
+        tts: tts::diagnostics(),
+        providers: provider::list(),
+        stt_provider: app_settings.stt_provider,
+        chat_provider: app_settings.preferred_chat_provider,
+        recent_failures,
+    }
+}
+
+#[tauri::command]
 fn start_manual_capture(app: AppHandle) -> Result<(), String> {
     let recorder = app.state::<Arc<Mutex<AudioRecorder>>>().inner().clone();
     let path = recorder
@@ -312,13 +355,16 @@ pub fn run() {
             get_settings,
             history_recent,
             insert_text,
+            list_toolchains,
             list_providers,
             get_local_whisper_diagnostics,
+            get_runtime_diagnostics,
             open_settings_window,
             provider_api_key_status,
             read_selected_text,
             replace_selected_text,
             save_settings,
+            save_toolchains,
             run_toolchain_from_text,
             start_manual_capture,
             stop_manual_capture,

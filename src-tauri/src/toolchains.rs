@@ -72,6 +72,54 @@ pub fn load_toolchains() -> Result<Vec<Toolchain>, String> {
         .map_err(|error| format!("Toolchains JSON ist ungueltig: {error}"))
 }
 
+pub fn save_toolchains(toolchains: &[Toolchain]) -> Result<(), String> {
+    validate_toolchains(toolchains)?;
+    let path = toolchains_path()?;
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Toolchain-Verzeichnis konnte nicht erstellt werden: {error}"))?;
+    }
+
+    let content = serde_json::to_string_pretty(toolchains)
+        .map_err(|error| format!("Toolchains konnten nicht serialisiert werden: {error}"))?;
+    fs::write(path, content).map_err(|error| format!("Toolchains konnten nicht geschrieben werden: {error}"))
+}
+
+fn validate_toolchains(toolchains: &[Toolchain]) -> Result<(), String> {
+    for chain in toolchains {
+        if chain.id.trim().is_empty() {
+            return Err("Jede Toolchain benoetigt eine ID".to_string());
+        }
+        if chain.name.trim().is_empty() {
+            return Err(format!("Toolchain '{}' hat keinen Namen", chain.id));
+        }
+        if chain.trigger.trim().is_empty() {
+            return Err(format!("Toolchain '{}' hat keinen Trigger", chain.id));
+        }
+        if chain.steps.is_empty() {
+            return Err(format!("Toolchain '{}' hat keine Schritte", chain.id));
+        }
+
+        for step in &chain.steps {
+            let kind = step.kind.trim();
+            if !matches!(kind, "open_url" | "open_app" | "shell") {
+                return Err(format!(
+                    "Toolchain '{}' enthaelt ungueltigen Step-Typ '{}'",
+                    chain.id, step.kind
+                ));
+            }
+            if step.value.trim().is_empty() {
+                return Err(format!(
+                    "Toolchain '{}' enthaelt leeren Step-Wert fuer '{}'",
+                    chain.id, step.kind
+                ));
+            }
+        }
+    }
+
+    Ok(())
+}
+
 fn run_step(step: &ToolchainStep) -> Result<(), String> {
     match step.kind.as_str() {
         "open_url" => {

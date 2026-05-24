@@ -1,6 +1,16 @@
 use std::process::Command;
 
+use serde::Serialize;
+
 use crate::{history, settings};
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct TtsDiagnostics {
+    pub backend: String,
+    pub available: bool,
+    pub message: String,
+}
 
 pub fn speak_text(text: &str) -> Result<String, String> {
     let app_settings = settings::load().unwrap_or_default();
@@ -35,6 +45,38 @@ pub fn speak_text(text: &str) -> Result<String, String> {
     });
 
     Ok(backend.to_string())
+}
+
+pub fn diagnostics() -> TtsDiagnostics {
+    if command_exists("spd-say") {
+        return TtsDiagnostics {
+            backend: "spd-say".to_string(),
+            available: true,
+            message: "TTS bereit via spd-say".to_string(),
+        };
+    }
+
+    if command_exists("espeak-ng") {
+        return TtsDiagnostics {
+            backend: "espeak-ng".to_string(),
+            available: true,
+            message: "TTS bereit via espeak-ng".to_string(),
+        };
+    }
+
+    if command_exists("espeak") {
+        return TtsDiagnostics {
+            backend: "espeak".to_string(),
+            available: true,
+            message: "TTS bereit via espeak".to_string(),
+        };
+    }
+
+    TtsDiagnostics {
+        backend: "none".to_string(),
+        available: false,
+        message: "Kein TTS-Backend gefunden. Installiere spd-say, espeak-ng oder espeak.".to_string(),
+    }
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<(), String> {

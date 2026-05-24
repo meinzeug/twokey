@@ -548,6 +548,49 @@ p {
   line-height: 1.35;
 }
 
+.provider-row label {
+  display: grid;
+  grid-template-columns: 120px minmax(0, 1fr);
+  align-items: center;
+  gap: 10px;
+}
+
+.provider-row input,
+.provider-row select,
+.toolchain-step-grid input,
+.toolchain-step-grid select {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #eef4fb;
+  background: #0c111a;
+}
+
+.toolchain-step-grid {
+  display: grid;
+  grid-template-columns: 130px minmax(0, 1fr) 130px;
+  gap: 8px;
+}
+
+.toolchain-step-grid button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  color: #f5f7fb;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
+}
+
+.diagnostics-warning {
+  border-color: rgba(255, 184, 120, 0.35);
+  background: rgba(255, 184, 120, 0.08);
+}
+
+.diagnostics-warning strong {
+  color: #ffddad;
+}
+
 .hotkey-capture-row {
   border: 1px solid rgba(117, 224, 195, 0.25);
   border-radius: 8px;
@@ -624,6 +667,11 @@ p {
   }
 
   .setting-fields label {
+    grid-template-columns: 1fr;
+  }
+
+  .toolchain-step-grid,
+  .provider-row label {
     grid-template-columns: 1fr;
   }
 }

@@ -20,9 +20,11 @@ import {
   getHistoryRecent,
   getDesktopCapabilities,
   getLocalWhisperDiagnostics,
+  getRuntimeDiagnostics,
   getSettings,
   installLatestUpdate,
   insertText,
+  listToolchains,
   listProviders,
   listenForHotkeyEvents,
   openSettingsWindow,
@@ -30,6 +32,7 @@ import {
   readSelectedText,
   replaceSelectedText,
   runToolchainFromText,
+  saveToolchains,
   saveSettings,
   setProviderApiKey,
   submitFeedback,
@@ -43,8 +46,11 @@ import {
   type DesktopCapabilities,
   type FileContext,
   type HistoryEntry,
+  type LocalWhisperDiagnostics,
   type ProviderInfo,
+  type RuntimeDiagnostics,
   type SecretStatus,
+  type Toolchain,
 } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
@@ -642,11 +648,21 @@ function buildConversationPrompt(transcript: string, context: FileContext | null
   return [contextText, "Nutzerfrage:", transcript].join("\n\n");
 }
 
+function createDefaultToolchain(index: number): Toolchain {
+  return {
+    id: `toolchain-${index}`,
+    name: `Neue Toolchain ${index}`,
+    trigger: "neue automation",
+    steps: [{ kind: "shell", value: "echo \"hello twokey\"" }],
+  };
+}
+
 function SettingsWindow() {
   type SaveStateKind = "idle" | "saving" | "installing" | "success" | "error";
 
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [toolchains, setToolchains] = useState<Toolchain[]>([]);
   const [secretStatus, setSecretStatus] = useState<Record<string, SecretStatus>>({});
   const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({
     "openai-compatible": "",
@@ -659,11 +675,14 @@ function SettingsWindow() {
   const [saveState, setSaveState] = useState("Bereit");
   const [saveStateKind, setSaveStateKind] = useState<SaveStateKind>("idle");
   const [updateState, setUpdateState] = useState("Nicht geprueft");
-  const [whisperDiag, setWhisperDiag] = useState<string>("");
+  const [whisperDiag, setWhisperDiag] = useState<LocalWhisperDiagnostics | null>(null);
+  const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiagnostics | null>(null);
   const settingsSections = [
     { id: "allgemein", label: "Allgemein" },
     { id: "hotkeys", label: "Hotkeys" },
     { id: "sprache-ki", label: "Sprache und KI" },
+    { id: "automationen", label: "Automationen" },
+    { id: "diagnose", label: "Diagnose" },
     { id: "datenschutz-updates", label: "Datenschutz und Updates" },
   ];
 
@@ -691,7 +710,9 @@ function SettingsWindow() {
       })
       .catch(() => setSecretStatus({}));
     getHistoryRecent(25).then(setHistoryEntries).catch(() => setHistoryEntries([]));
-    getLocalWhisperDiagnostics().then((diag) => setWhisperDiag(diag.message)).catch(() => setWhisperDiag("Diagnose nicht verfuegbar"));
+    getLocalWhisperDiagnostics().then(setWhisperDiag).catch(() => setWhisperDiag(null));
+    getRuntimeDiagnostics().then(setRuntimeDiag).catch(() => setRuntimeDiag(null));
+    listToolchains().then(setToolchains).catch(() => setToolchains([]));
   }, []);
 
   useEffect(() => {
@@ -738,8 +759,133 @@ function SettingsWindow() {
     };
   }, [hotkeyCaptureActive]);
 
+  const capabilityWarnings = useMemo(() => {
+    if (!settings) {
+      return [] as string[];
+    }
+
+    const warnings: string[] = [];
+    const preferredProvider = providers.find((provider) => provider.id === settings.preferredChatProvider);
+    if (preferredProvider && !preferredProvider.enabled) {
+      warnings.push(`Chat-Provider '${preferredProvider.label}' ist nicht aktiv (API-Key fehlt).`);
+    }
+
+    if (preferredProvider && !preferredProvider.supportsVision) {
+      warnings.push(`Chat-Provider '${preferredProvider.label}' unterstuetzt kein Bildverstaendnis.`);
+    }
+
+    if (settings.sttProvider === "openai-compatible" && !secretStatus["openai-compatible"]?.configured) {
+      warnings.push("STT-Provider 'openai-compatible' benoetigt einen gesetzten OpenAI API-Key.");
+    }
+
+    if (settings.sttProvider === "local-whisper" && whisperDiag && (!whisperDiag.whisperAvailable || !whisperDiag.ffmpegAvailable)) {
+      warnings.push("Lokal Whisper ist unvollstaendig eingerichtet. Fuehre Runtime-Setup aus.");
+    }
+
+    if (settings.ttsEnabled && runtimeDiag && !runtimeDiag.tts.available) {
+      warnings.push("TTS ist aktiviert, aber kein TTS-Backend wurde gefunden.");
+    }
+
+    return warnings;
+  }, [settings, providers, secretStatus, whisperDiag, runtimeDiag]);
+
+  const refreshRuntimeDiagnostics = () => {
+    setSaveState("Aktualisiere Diagnose...");
+    setSaveStateKind("saving");
+    Promise.all([getRuntimeDiagnostics(), getLocalWhisperDiagnostics(), getHistoryRecent(25)])
+      .then(([diag, whisper, recent]) => {
+        setRuntimeDiag(diag);
+        setWhisperDiag(whisper);
+        setHistoryEntries(recent);
+        setSaveState("Diagnose aktualisiert");
+        setSaveStateKind("success");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
+  };
+
+  const persistToolchains = (nextToolchains: Toolchain[]) => {
+    setToolchains(nextToolchains);
+    setSaveState("Speichere Toolchains...");
+    setSaveStateKind("saving");
+    saveToolchains(nextToolchains)
+      .then(() => {
+        setSaveState("Toolchains gespeichert");
+        setSaveStateKind("success");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
+  };
+
+  const updateToolchain = (index: number, patch: Partial<Toolchain>) => {
+    const next = toolchains.map((chain, chainIndex) => (chainIndex === index ? { ...chain, ...patch } : chain));
+    persistToolchains(next);
+  };
+
+  const updateToolchainStep = (chainIndex: number, stepIndex: number, key: "kind" | "value", value: string) => {
+    const next = toolchains.map((chain, idx) => {
+      if (idx !== chainIndex) {
+        return chain;
+      }
+
+      return {
+        ...chain,
+        steps: chain.steps.map((step, innerIndex) => (innerIndex === stepIndex ? { ...step, [key]: value } : step)),
+      };
+    });
+    persistToolchains(next);
+  };
+
+  const removeToolchain = (index: number) => {
+    const next = toolchains.filter((_, chainIndex) => chainIndex !== index);
+    persistToolchains(next);
+  };
+
+  const addToolchain = () => {
+    const next = [...toolchains, createDefaultToolchain(toolchains.length + 1)];
+    persistToolchains(next);
+  };
+
+  const addToolchainStep = (index: number) => {
+    const next = toolchains.map((chain, chainIndex) =>
+      chainIndex === index ? { ...chain, steps: [...chain.steps, { kind: "shell", value: "echo \"step\"" }] } : chain,
+    );
+    persistToolchains(next);
+  };
+
+  const removeToolchainStep = (chainIndex: number, stepIndex: number) => {
+    const next = toolchains.map((chain, idx) => {
+      if (idx !== chainIndex) {
+        return chain;
+      }
+
+      const remainingSteps = chain.steps.filter((_, innerIndex) => innerIndex !== stepIndex);
+      return { ...chain, steps: remainingSteps.length ? remainingSteps : [{ kind: "shell", value: "echo \"step\"" }] };
+    });
+    persistToolchains(next);
+  };
+
   const updateSetting = <Key extends keyof AppSettings>(key: Key, value: AppSettings[Key]) => {
     if (!settings) {
+      return;
+    }
+
+    if (key === "preferredChatProvider") {
+      const provider = providers.find((item) => item.id === String(value));
+      if (provider && !provider.enabled) {
+        setSaveState(`Provider '${provider.label}' ist nicht aktiv. Bitte zuerst API-Key setzen.`);
+        setSaveStateKind("error");
+        return;
+      }
+    }
+
+    if (key === "sttProvider" && value === "openai-compatible" && !secretStatus["openai-compatible"]?.configured) {
+      setSaveState("OpenAI-kompatibles STT benoetigt einen gesetzten OpenAI API-Key.");
+      setSaveStateKind("error");
       return;
     }
 
@@ -929,6 +1075,7 @@ function SettingsWindow() {
                 <option value="mock">Mock</option>
                 <option value="external-command">Externer Befehl</option>
                 <option value="local-whisper">Lokal Whisper</option>
+                <option value="openai-compatible">OpenAI-kompatibel</option>
               </select>
             </label>
             {settings.sttProvider === "local-whisper" && (
@@ -956,15 +1103,24 @@ function SettingsWindow() {
                 <div className="provider-row">
                   <strong>Hinweis</strong>
                   <small>Kleinere Modelle und Beam-Size 1-2 sind schneller. Groessere Modelle und hoehere Beam-Size liefern meist bessere Transkripte, brauchen aber mehr Zeit.</small>
-                  <small>{whisperDiag}</small>
+                  <small>{whisperDiag?.message ?? "Diagnose nicht verfuegbar"}</small>
+                  <small>Whisper: {whisperDiag?.whisperAvailable ? "bereit" : "fehlt"} | ffmpeg: {whisperDiag?.ffmpegAvailable ? "bereit" : "fehlt"}</small>
                   <div className="replacement-actions">
                     <button
                       type="button"
                       onClick={() => {
-                        setWhisperDiag("Pruefe Runtime...");
+                        setSaveState("Pruefe Runtime...");
+                        setSaveStateKind("saving");
                         getLocalWhisperDiagnostics()
-                          .then((diag) => setWhisperDiag(diag.message))
-                          .catch((error: unknown) => setWhisperDiag(error instanceof Error ? error.message : String(error)));
+                          .then((diag) => {
+                            setWhisperDiag(diag);
+                            setSaveState("Whisper-Diagnose aktualisiert");
+                            setSaveStateKind("success");
+                          })
+                          .catch((error: unknown) => {
+                            setSaveState(error instanceof Error ? error.message : String(error));
+                            setSaveStateKind("error");
+                          });
                       }}
                     >
                       Diagnose aktualisieren
@@ -1066,6 +1222,99 @@ function SettingsWindow() {
                   <small>{provider.note}</small>
                 </div>
               ))}
+            </div>
+            {capabilityWarnings.length > 0 ? (
+              <div className="provider-row diagnostics-warning">
+                <strong>Guardrails</strong>
+                {capabilityWarnings.map((warning) => (
+                  <small key={warning}>{warning}</small>
+                ))}
+              </div>
+            ) : null}
+          </SettingsGroup>
+          )}
+
+          {activeSection === "automationen" && (
+          <SettingsGroup title="Automationen und Toolchains">
+            <div className="update-check">
+              <button type="button" onClick={addToolchain}>Neue Toolchain</button>
+              <span>Toolchains werden beim Aendern direkt gespeichert.</span>
+            </div>
+            <div className="provider-list">
+              {toolchains.map((chain, chainIndex) => (
+                <div className="provider-row" key={`${chain.id}-${chainIndex}`}>
+                  <label>
+                    <span>ID</span>
+                    <input value={chain.id} onChange={(event) => updateToolchain(chainIndex, { id: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Name</span>
+                    <input value={chain.name} onChange={(event) => updateToolchain(chainIndex, { name: event.target.value })} />
+                  </label>
+                  <label>
+                    <span>Trigger</span>
+                    <input value={chain.trigger} onChange={(event) => updateToolchain(chainIndex, { trigger: event.target.value })} />
+                  </label>
+                  <strong>Schritte</strong>
+                  {chain.steps.map((step, stepIndex) => (
+                    <div className="toolchain-step-grid" key={`${chain.id}-step-${stepIndex}`}>
+                      <select
+                        value={step.kind}
+                        onChange={(event) => updateToolchainStep(chainIndex, stepIndex, "kind", event.target.value)}
+                      >
+                        <option value="open_url">open_url</option>
+                        <option value="open_app">open_app</option>
+                        <option value="shell">shell</option>
+                      </select>
+                      <input
+                        value={step.value}
+                        onChange={(event) => updateToolchainStep(chainIndex, stepIndex, "value", event.target.value)}
+                      />
+                      <button type="button" onClick={() => removeToolchainStep(chainIndex, stepIndex)}>Step loeschen</button>
+                    </div>
+                  ))}
+                  <div className="replacement-actions">
+                    <button type="button" onClick={() => addToolchainStep(chainIndex)}>Step hinzufuegen</button>
+                    <button type="button" onClick={() => removeToolchain(chainIndex)}>Toolchain loeschen</button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </SettingsGroup>
+          )}
+
+          {activeSection === "diagnose" && (
+          <SettingsGroup title="Runtime-Diagnose">
+            <div className="update-check">
+              <button type="button" onClick={refreshRuntimeDiagnostics}>Diagnose aktualisieren</button>
+              <span>{runtimeDiag ? "Diagnose erfolgreich geladen" : "Keine Diagnose verfuegbar"}</span>
+            </div>
+            <div className="provider-list">
+              <div className="provider-row">
+                <strong>Desktop</strong>
+                <small>Session: {runtimeDiag?.desktop.sessionType ?? "unknown"}</small>
+                <small>Compositor: {runtimeDiag?.desktop.compositor ?? "unknown"}</small>
+                <small>Backend: {runtimeDiag?.desktop.automationBackend ?? "unknown"}</small>
+                <small>Hotkeys: {runtimeDiag?.desktop.hotkeysSupported ? "verfuegbar" : "nicht verfuegbar"}</small>
+                <small>Audio: {runtimeDiag?.desktop.audioSupported ? "verfuegbar" : "nicht verfuegbar"}</small>
+              </div>
+              <div className="provider-row">
+                <strong>STT/TTS Runtime</strong>
+                <small>{runtimeDiag?.whisper.message ?? "Whisper-Diagnose nicht verfuegbar"}</small>
+                <small>{runtimeDiag?.tts.message ?? "TTS-Diagnose nicht verfuegbar"}</small>
+                <small>Aktives STT-Setting: {runtimeDiag?.sttProvider ?? "unknown"}</small>
+                <small>Aktives Chat-Setting: {runtimeDiag?.chatProvider ?? "unknown"}</small>
+              </div>
+              <div className="provider-row">
+                <strong>Letzte Fehlerereignisse</strong>
+                {(runtimeDiag?.recentFailures ?? []).length === 0 ? (
+                  <small>Keine Fehler in den letzten 100 Historieneintraegen.</small>
+                ) : (
+                  (runtimeDiag?.recentFailures ?? []).map((entry) => (
+                    <small key={`failure-${entry.id}`}>{entry.kind} | {entry.provider ?? "-"} | {new Date(entry.tsUnixMs).toLocaleString()}</small>
+                  ))
+                )}
+              </div>
             </div>
           </SettingsGroup>
           )}

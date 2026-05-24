@@ -13,6 +13,7 @@
 
 - Conversation mode with provider routing.
 - Toolchain trigger execution from spoken transcript.
+- Visual toolchain editor in settings with persistent create/edit/delete flow.
 - Direct edit/replace flow for selected text.
 - Dictation insertion flow.
 - Feedback capture and persistence.
@@ -36,22 +37,22 @@
 
 ## In Progress
 
-- Better guardrails and failure UX for provider capability mismatches.
-- Better hotkey diagnostics and live status observability.
+- Expand runtime tests from smoke checks to real interaction E2E scenarios.
 - Signed updater pipeline and rollback-ready install flow design.
 
 ## Planned
 
 ### Desktop Automation
 
-- Visual editor for reusable toolchains/macros.
 - Richer action catalog (window placement, sequence timing, app state checks).
+- Workflow safety controls (dry-run/validation/permission prompts).
 
 ### Platform Hardening
 
 - Wayland-specific UX paths and clearer fallbacks.
 - Expanded Linux compositor compatibility matrix (tracking doc added).
 - Compositor-aware runtime detection and backend messaging for GNOME/KDE/Sway/Hyprland.
+- Runtime diagnostics panel in settings (session/backend/STT/TTS/recent failures).
 
 ### Update/Release Hardening
 

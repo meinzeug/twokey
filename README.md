@@ -69,7 +69,7 @@ Implemented from video behavior:
 
 Still not fully equivalent to the video vision:
 
-- Toolchains are implemented, but no visual workflow builder exists yet.
+- Toolchains have a visual settings editor; richer action templates and safety controls are still pending.
 - Wayland still has compositor-specific limits for global hold hotkeys and full automation.
 - Update install is AppImage-first with channel-aware checks (`stable`/`beta`/`dev`), checksum validation and local rollback fallback.
 
@@ -132,6 +132,7 @@ Build:
 ```bash
 npm run build
 cd src-tauri && cargo check
+```
 
 Runtime smoke tests:
 
@@ -139,7 +140,6 @@ Runtime smoke tests:
 cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
 TWOKEY_E2E_SESSION=x11 cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
 TWOKEY_E2E_SESSION=wayland cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
-```
 ```
 
 ## Hotkey Behavior

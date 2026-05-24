@@ -56,7 +56,10 @@ Align runtime behavior with the video UX:
 - Save/install UX in settings shows explicit operation status (including install phase).
 - Edit mode safety toggle available (`direkt ersetzen` vs preview/confirm).
 - Provider guardrail for image-context + non-vision provider mismatch.
+- Provider/STT guardrails in settings for provider activation, vision limits, OpenAI STT key requirement and local-whisper readiness.
 - Local Whisper runtime diagnostics endpoint wired into settings.
+- Runtime diagnostics panel in settings for desktop/session backend, STT/TTS readiness and recent runtime failures.
+- Visual Toolchain/Workflow editor in settings (create/edit/remove chains and steps).
 - TTS backend support:
   - spd-say
   - espeak-ng / espeak
@@ -87,7 +90,7 @@ Align runtime behavior with the video UX:
 1. Remote rollout management (dashboard/control plane) beyond release-note marker control.
 2. Deeper compositor-native Wayland integrations beyond current safe integration paths.
 3. Full end-to-end runtime integration tests on real compositor sessions (beyond smoke-level checks).
-4. Visual toolchain/workflow builder.
+4. Richer action catalog and execution safety controls for visual toolchains.
 
 ## Validation Snapshot
 
@@ -96,6 +99,6 @@ Align runtime behavior with the video UX:
 
 ## Next Priorities
 
-1. Improve runtime diagnostics for hotkey/STT failures directly in UI.
-2. Expand provider capability guardrails for full feature matrix (vision/TTS/STT).
-3. Expand runtime tests from smoke checks to real interaction E2E scenarios.
+1. Expand runtime tests from smoke checks to real interaction E2E scenarios.
+2. Add compositor-native hold-hotkey integrations where portals/protocols allow it.
+3. Extend workflow builder with step templates and dry-run validation.

@@ -105,6 +105,32 @@ export type LocalWhisperDiagnostics = {
   message: string;
 };
 
+export type ToolchainStep = {
+  kind: string;
+  value: string;
+};
+
+export type Toolchain = {
+  id: string;
+  name: string;
+  trigger: string;
+  steps: ToolchainStep[];
+};
+
+export type RuntimeDiagnostics = {
+  desktop: DesktopCapabilities;
+  whisper: LocalWhisperDiagnostics;
+  tts: {
+    backend: string;
+    available: boolean;
+    message: string;
+  };
+  providers: ProviderInfo[];
+  sttProvider: string;
+  chatProvider: string;
+  recentFailures: HistoryEntry[];
+};
+
 export async function getDesktopSessionType(): Promise<string> {
   if (!isTauriRuntime()) {
     return "browser-preview";
@@ -304,6 +330,22 @@ export async function runToolchainFromText(text: string): Promise<string | null>
   return invoke<string | null>("run_toolchain_from_text", { text });
 }
 
+export async function listToolchains(): Promise<Toolchain[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<Toolchain[]>("list_toolchains");
+}
+
+export async function saveToolchains(toolchains: Toolchain[]): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("save_toolchains", { toolchains });
+}
+
 export async function startManualCapture(): Promise<void> {
   if (!isTauriRuntime()) {
     return;
@@ -364,6 +406,38 @@ export async function getLocalWhisperDiagnostics(): Promise<LocalWhisperDiagnost
   }
 
   return invoke<LocalWhisperDiagnostics>("get_local_whisper_diagnostics");
+}
+
+export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
+  if (!isTauriRuntime()) {
+    return {
+      desktop: {
+        sessionType: "browser-preview",
+        hotkeysSupported: false,
+        audioSupported: false,
+        automationBackend: "browser",
+        warning: "Browser-Vorschau ohne native Runtime-Diagnose.",
+      },
+      whisper: {
+        whisperAvailable: false,
+        ffmpegAvailable: false,
+        managedWhisperPath: "",
+        managedFfmpegPath: "",
+        message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+      },
+      tts: {
+        backend: "none",
+        available: false,
+        message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+      },
+      providers: [],
+      sttProvider: "mock",
+      chatProvider: "ollama",
+      recentFailures: [],
+    };
+  }
+
+  return invoke<RuntimeDiagnostics>("get_runtime_diagnostics");
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {
