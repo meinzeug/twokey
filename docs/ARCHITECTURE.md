@@ -74,10 +74,12 @@ Implemented:
 - Double-tap mode cycle event
 - Escape cancellation event for active recording
 - CLI-backed audio recording prototype using `pw-record`, `parec`, or `arecord`
+- STT pipeline with deterministic mock provider
+- External STT command adapter through `TWOKEY_STT_COMMAND`
 
 Not implemented:
 
-- STT/TTS
+- TTS
 - Ollama/OpenAI/OpenRouter providers
 - SQLite storage
 - Clipboard and text replacement

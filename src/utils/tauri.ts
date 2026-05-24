@@ -14,6 +14,8 @@ export type HotkeyEvent = {
   status: "ready" | "listening" | "transcribing" | "thinking" | "writing" | "error";
   message: string;
   audioPath?: string | null;
+  transcript?: string | null;
+  provider?: string | null;
 };
 
 export async function getDesktopSessionType(): Promise<string> {

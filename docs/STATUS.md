@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 2: Global Hotkey + Audioaufnahme.
+Phase 3: STT Mock + echtes STT.
 
 ## Completed
 
@@ -25,6 +25,11 @@ Phase 2: Global Hotkey + Audioaufnahme.
 - CLI-backed audio recording implemented with `pw-record`, `parec`, or `arecord`.
 - Wayland limitation is detected and surfaced instead of failing silently.
 - X11 synthetic hotkey test with `xdotool` created a WAV recording in `~/.cache/twokey-ai/recordings/`.
+- Recording stop now triggers a transcription pipeline.
+- Mock STT provider implemented for deterministic development.
+- External real STT command adapter implemented through `TWOKEY_STT_COMMAND`.
+- Overlay displays the latest transcript and provider.
+- X11 synthetic test verified `recording-started`, `recording-stopped`, and `transcript-ready` events.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -46,16 +51,17 @@ Phase 2: Global Hotkey + Audioaufnahme.
 - The overlay position is fixed in configuration and not yet user-persisted.
 - The settings page is a placeholder and does not save values.
 - `git push origin main` is blocked in this shell because HTTPS Git credentials are not configured.
-- STT is not implemented yet, so saved recordings are not transcribed.
+- No bundled local Whisper model or Whisper binary is installed by the app yet.
+- `TWOKEY_STT_COMMAND` is intentionally explicit and must be configured by the developer/user for real STT.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 3: STT Mock + echtes STT.
+Phase 4: Gesprächsmodus mit Ollama.
 
-Planned Phase 3 work:
+Planned Phase 4 work:
 
-- Add a mock transcriber for deterministic development.
-- Add transcript display in the overlay.
-- Wire the recording path from Phase 2 into the transcription pipeline.
-- Plan local Whisper and OpenAI-compatible STT provider interfaces.
+- Add Ollama chat provider.
+- Route conversation-mode transcripts to Ollama.
+- Display assistant responses in the overlay.
+- Keep dictation and text-edit modes from calling the LLM until their phases are implemented.

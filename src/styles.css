@@ -249,6 +249,28 @@ p {
   line-height: 1.4;
 }
 
+.transcript-box {
+  margin-top: 10px;
+  border: 1px solid rgba(117, 224, 195, 0.22);
+  border-radius: 8px;
+  padding: 10px;
+  background: rgba(117, 224, 195, 0.07);
+}
+
+.transcript-box strong {
+  display: block;
+  margin-bottom: 6px;
+  color: #75e0c3;
+  font-size: 12px;
+}
+
+.transcript-box p {
+  margin: 0;
+  color: #e8eef7;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
 .settings-shell {
   min-height: 100vh;
   display: grid;

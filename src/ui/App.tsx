@@ -83,6 +83,8 @@ function OverlayApp() {
   });
   const [eventMessage, setEventMessage] = useState("Phase 2 startet Hotkeys und Audioaufnahme.");
   const [lastAudioPath, setLastAudioPath] = useState<string | null>(null);
+  const [lastTranscript, setLastTranscript] = useState<string | null>(null);
+  const [lastProvider, setLastProvider] = useState<string | null>(null);
   const activeMode = modes[mode];
   const ActiveIcon = activeMode.icon;
 
@@ -129,6 +131,14 @@ function OverlayApp() {
 
       if (event.audioPath) {
         setLastAudioPath(event.audioPath);
+      }
+
+      if (event.transcript) {
+        setLastTranscript(event.transcript);
+      }
+
+      if (event.provider) {
+        setLastProvider(event.provider);
       }
     }).then((cleanup) => {
       unlisten = cleanup;
@@ -239,6 +249,12 @@ function OverlayApp() {
           </div>
 
           <p className="event-text">{eventMessage}</p>
+          {lastTranscript ? (
+            <div className="transcript-box">
+              <strong>Transkript{lastProvider ? ` (${lastProvider})` : ""}</strong>
+              <p>{lastTranscript}</p>
+            </div>
+          ) : null}
           {lastAudioPath ? <p className="path-text">{lastAudioPath}</p> : null}
           <p className="preview-text">{statusPreview}</p>
         </section>
@@ -279,8 +295,8 @@ function SettingsWindow() {
       <section className="settings-content">
         <div className="settings-title">
           <div>
-            <p className="eyebrow">Phase 2 Platzhalter</p>
-            <h1>Hotkeys und Audio werden vorbereitet</h1>
+            <p className="eyebrow">Phase 3 Platzhalter</p>
+            <h1>Transkription ist vorbereitet</h1>
           </div>
           <span>v0.1.0</span>
         </div>
@@ -288,6 +304,7 @@ function SettingsWindow() {
         <div className="settings-grid">
           <SettingCard title="Overlay" value="Pille, dunkles Theme, Modusmenü" />
           <SettingCard title="Hotkeys" value="Ctrl+Space ist der erste X11-Hold-Hotkey. Wayland wird explizit begrenzt gemeldet." />
+          <SettingCard title="STT" value="Mock-STT ist aktiv. Echtes STT kann vorerst ueber TWOKEY_STT_COMMAND angebunden werden." />
           <SettingCard title="Provider" value="Ollama und OpenAI-kompatible APIs ab späteren Phasen" />
           <SettingCard title="Datenschutz" value="XDG-Pfade, lokale Defaults und externe Warnungen geplant" />
         </div>

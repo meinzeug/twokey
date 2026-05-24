@@ -7,7 +7,7 @@ use std::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::audio::AudioRecorder;
+use crate::{audio::AudioRecorder, stt};
 
 const HOLD_DELAY: Duration = Duration::from_millis(180);
 const DOUBLE_TAP_WINDOW: Duration = Duration::from_millis(420);
@@ -30,6 +30,8 @@ struct HotkeyEvent {
     status: &'static str,
     message: String,
     audio_path: Option<String>,
+    transcript: Option<String>,
+    provider: Option<String>,
 }
 
 pub fn capabilities() -> DesktopCapabilities {
@@ -75,6 +77,8 @@ pub fn start_hotkey_service(app: &tauri::App) {
             status: "ready",
             message: capability_message(&caps),
             audio_path: None,
+            transcript: None,
+            provider: None,
         },
     );
 
@@ -93,6 +97,8 @@ pub fn start_hotkey_service(app: &tauri::App) {
                     status: "error",
                     message: error,
                     audio_path: None,
+                    transcript: None,
+                    provider: None,
                 },
             );
         }
@@ -124,6 +130,8 @@ fn run_x11_loop(app: AppHandle, recorder: Arc<Mutex<AudioRecorder>>) -> Result<(
                     status: "ready",
                     message: "Audioaufnahme abgebrochen".to_string(),
                     audio_path: None,
+                    transcript: None,
+                    provider: None,
                 },
             );
         }
@@ -143,6 +151,8 @@ fn run_x11_loop(app: AppHandle, recorder: Arc<Mutex<AudioRecorder>>) -> Result<(
                             status: "listening",
                             message: "Höre zu... Loslassen verarbeitet die Aufnahme.".to_string(),
                             audio_path: Some(path.to_string_lossy().to_string()),
+                            transcript: None,
+                            provider: None,
                         },
                     );
                 }
@@ -155,6 +165,8 @@ fn run_x11_loop(app: AppHandle, recorder: Arc<Mutex<AudioRecorder>>) -> Result<(
                             status: "error",
                             message: error,
                             audio_path: None,
+                            transcript: None,
+                            provider: None,
                         },
                     );
                 }
@@ -169,15 +181,21 @@ fn run_x11_loop(app: AppHandle, recorder: Arc<Mutex<AudioRecorder>>) -> Result<(
                     .stop()?;
                 recording = false;
 
-                emit_event(
-                    &app,
-                    HotkeyEvent {
-                        kind: "recording-stopped",
-                        status: "ready",
-                        message: "Audioaufnahme gespeichert. STT folgt in Phase 3.".to_string(),
-                        audio_path: stopped_path.map(|path| path.to_string_lossy().to_string()),
-                    },
-                );
+                if let Some(path) = stopped_path {
+                    emit_event(
+                        &app,
+                        HotkeyEvent {
+                            kind: "recording-stopped",
+                            status: "transcribing",
+                            message: "Audioaufnahme gespeichert. Transkribiere...".to_string(),
+                            audio_path: Some(path.to_string_lossy().to_string()),
+                            transcript: None,
+                            provider: None,
+                        },
+                    );
+
+                    start_transcription(app.clone(), path);
+                }
             } else if press_started.is_some_and(|started| now.duration_since(started) < HOLD_DELAY) {
                 if last_tap.is_some_and(|tap| now.duration_since(tap) <= DOUBLE_TAP_WINDOW) {
                     last_tap = None;
@@ -188,6 +206,8 @@ fn run_x11_loop(app: AppHandle, recorder: Arc<Mutex<AudioRecorder>>) -> Result<(
                             status: "ready",
                             message: "Doppeltipp erkannt: nächster Modus".to_string(),
                             audio_path: None,
+                            transcript: None,
+                            provider: None,
                         },
                     );
                 } else {
@@ -203,6 +223,33 @@ fn run_x11_loop(app: AppHandle, recorder: Arc<Mutex<AudioRecorder>>) -> Result<(
     }
 }
 
+fn start_transcription(app: AppHandle, path: std::path::PathBuf) {
+    thread::spawn(move || match stt::transcribe(&path) {
+        Ok(transcript) => emit_event(
+            &app,
+            HotkeyEvent {
+                kind: "transcript-ready",
+                status: "ready",
+                message: "Transkription abgeschlossen. KI-Verarbeitung folgt in Phase 4.".to_string(),
+                audio_path: Some(path.to_string_lossy().to_string()),
+                transcript: Some(transcript.text),
+                provider: Some(transcript.provider),
+            },
+        ),
+        Err(error) => emit_event(
+            &app,
+            HotkeyEvent {
+                kind: "error",
+                status: "error",
+                message: error,
+                audio_path: Some(path.to_string_lossy().to_string()),
+                transcript: None,
+                provider: None,
+            },
+        ),
+    });
+}
+
 fn capability_message(caps: &DesktopCapabilities) -> String {
     if let Some(warning) = &caps.warning {
         return warning.clone();
@@ -215,6 +262,7 @@ fn capability_message(caps: &DesktopCapabilities) -> String {
 }
 
 fn emit_event(app: &AppHandle, event: HotkeyEvent) {
+    eprintln!("twokey event: {} - {}", event.kind, event.message);
     let _ = app.emit("twokey://hotkey-event", event);
 }
 

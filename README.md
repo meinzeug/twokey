@@ -11,8 +11,9 @@ Phase 1 implements the foundation only:
 - Placeholder settings window
 - Initial architecture and product documentation
 - X11 Phase 2 prototype: hold `Ctrl+Space` to record audio, double tap `Ctrl+Space` to cycle modes
+- Phase 3 prototype: mock STT and external STT command adapter
 
-No STT, TTS, text injection, or AI provider calls are implemented yet.
+No TTS, text injection, or AI provider calls are implemented yet.
 
 ## Requirements
 
@@ -56,6 +57,18 @@ Phase 2 hotkey behavior on X11:
 - Press `Escape`: cancel an active recording.
 
 On Wayland, generic global hold-hotkeys are reported as unavailable instead of failing silently.
+
+Phase 3 STT behavior:
+
+- Default STT provider is a deterministic mock transcriber.
+- To test a real local or custom STT command, set `TWOKEY_STT_COMMAND`.
+- The command must print the transcript to stdout and include `{audio}` as placeholder.
+
+Example:
+
+```bash
+TWOKEY_STT_COMMAND='whisper-cli -f {audio} --language de --no-timestamps' npm run tauri:dev
+```
 
 Build the frontend:
 

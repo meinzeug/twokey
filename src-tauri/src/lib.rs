@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager};
 
 mod audio;
 mod hotkeys;
+mod stt;
 
 #[tauri::command]
 fn get_desktop_session_type() -> String {
