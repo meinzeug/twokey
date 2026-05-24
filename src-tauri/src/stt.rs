@@ -1397,6 +1397,8 @@ fn is_root() -> bool {
 
 fn run_command(program: &str, args: &[&str]) -> Result<(), String> {
     let output = Command::new(program)
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
         .args(args)
         .output()
         .map_err(|error| format!("{program} konnte nicht gestartet werden: {error}"))?;

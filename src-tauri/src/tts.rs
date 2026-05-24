@@ -218,6 +218,8 @@ fn is_root() -> bool {
 
 fn run_command(program: &str, args: &[&str]) -> Result<(), String> {
     let status = Command::new(program)
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
         .args(args)
         .status()
         .map_err(|error| format!("TTS-Befehl {program} konnte nicht gestartet werden: {error}"))?;
