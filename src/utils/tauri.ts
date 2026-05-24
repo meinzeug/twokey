@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type DesktopCapabilities = {
   sessionType: string;
@@ -291,6 +292,22 @@ export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => vo
   }
 
   return listen<HotkeyEvent>("twokey://hotkey-event", (event) => callback(event.payload));
+}
+
+export async function setOverlayWindowExpanded(expanded: boolean): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("set_overlay_window_expanded", { expanded });
+}
+
+export async function startOverlayDrag(): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await getCurrentWindow().startDragging();
 }
 
 function isTauriRuntime() {

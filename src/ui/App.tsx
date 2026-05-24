@@ -29,8 +29,10 @@ import {
   replaceSelectedText,
   saveSettings,
   setProviderApiKey,
+  setOverlayWindowExpanded,
   setAutostart,
   speakText,
+  startOverlayDrag,
   type AppSettings,
   type DesktopCapabilities,
   type FileContext,
@@ -126,6 +128,10 @@ function OverlayApp() {
   useEffect(() => {
     modeRef.current = mode;
   }, [mode]);
+
+  useEffect(() => {
+    setOverlayWindowExpanded(menuOpen).catch(() => undefined);
+  }, [menuOpen]);
 
   useEffect(() => {
     let mounted = true;
@@ -310,7 +316,19 @@ function OverlayApp() {
 
   return (
     <main className="overlay-shell" onContextMenu={(event) => event.preventDefault()}>
-      <button className="pill" type="button" onClick={() => setMenuOpen((open) => !open)} onDoubleClick={openSettingsWindow}>
+      <button
+        className="pill"
+        type="button"
+        onClick={() => setMenuOpen((open) => !open)}
+        onDoubleClick={openSettingsWindow}
+        onMouseDown={(event) => {
+          if (event.button !== 0) {
+            return;
+          }
+
+          startOverlayDrag().catch(() => undefined);
+        }}
+      >
         <span className="mode-icon" aria-hidden="true">
           <ActiveIcon size={18} strokeWidth={2.2} />
         </span>

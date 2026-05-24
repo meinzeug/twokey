@@ -1,7 +1,7 @@
 use std::sync::{Arc, Mutex};
 
 use audio::AudioRecorder;
-use tauri::{AppHandle, Manager};
+use tauri::{AppHandle, LogicalSize, Manager, Size};
 
 mod audio;
 mod autostart;
@@ -36,6 +36,22 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
 
     window.show().map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())?;
+    Ok(())
+}
+
+#[tauri::command]
+fn set_overlay_window_expanded(app: AppHandle, expanded: bool) -> Result<(), String> {
+    let window = app
+        .get_webview_window("overlay")
+        .ok_or_else(|| "Overlay window is not configured".to_string())?;
+
+    let size = if expanded {
+        Size::Logical(LogicalSize::new(440.0, 620.0))
+    } else {
+        Size::Logical(LogicalSize::new(340.0, 72.0))
+    };
+
+    window.set_size(size).map_err(|error| error.to_string())?;
     Ok(())
 }
 
@@ -148,6 +164,7 @@ pub fn run() {
             read_selected_text,
             replace_selected_text,
             save_settings,
+            set_overlay_window_expanded,
             set_provider_api_key,
             speak_text,
             set_autostart
