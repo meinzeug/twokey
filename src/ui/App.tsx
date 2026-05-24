@@ -1082,9 +1082,14 @@ function SettingsWindow() {
             throw new Error("sherpa-onnx-Setup abgebrochen");
           }
 
+          const sudoPassword = window.prompt("Optional: sudo-Passwort eingeben, falls System-Abhaengigkeiten installiert werden muessen:");
+          if (sudoPassword === null) {
+            throw new Error("sherpa-onnx-Setup abgebrochen");
+          }
+
           setSaveState("Installiere sherpa-onnx Runtime...");
           setSaveStateKind("installing");
-          return ensureSherpaOnnxRuntime()
+          return ensureSherpaOnnxRuntime(sudoPassword)
             .then((message) => {
               setSaveState(message);
               setSaveStateKind("success");

@@ -90,10 +90,33 @@ pub fn ensure_sherpa_onnx_installed() -> Result<(), String> {
     install_sherpa_in_venv()
 }
 
-pub fn ensure_sherpa_onnx_runtime() -> Result<String, String> {
+pub fn ensure_sherpa_onnx_runtime(sudo_password: Option<&str>) -> Result<String, String> {
+    ensure_sherpa_system_dependencies(sudo_password)?;
     ensure_sherpa_onnx_installed()?;
     ensure_sherpa_model_downloaded()?;
     Ok("sherpa-onnx Runtime und Modell sind bereit.".to_string())
+}
+
+fn ensure_sherpa_system_dependencies(sudo_password: Option<&str>) -> Result<(), String> {
+    if command_exists("python3") && command_exists("tar") {
+        return Ok(());
+    }
+
+    if !command_exists("apt-get") {
+        return Err("python3/tar fehlen und apt-get ist nicht verfuegbar. Bitte installiere python3, python3-venv, python3-pip und tar manuell.".to_string());
+    }
+
+    run_privileged_command(
+        "apt-get",
+        &["install", "-y", "python3", "python3-venv", "python3-pip", "tar", "bzip2"],
+        sudo_password,
+    )?;
+
+    if !command_exists("python3") || !command_exists("tar") {
+        return Err("python3/tar konnten nach der Installation nicht verifiziert werden.".to_string());
+    }
+
+    Ok(())
 }
 
 pub fn sherpa_onnx_diagnostics() -> SherpaOnnxDiagnostics {
@@ -409,7 +432,7 @@ fn transcribe_with_local_whisper(
 }
 
 fn transcribe_with_sherpa_onnx(audio_path: &Path, language: &str) -> Result<Transcript, String> {
-    ensure_sherpa_onnx_runtime()?;
+    ensure_sherpa_onnx_runtime(None)?;
 
     if !audio_path.is_file() {
         return Err(format!(
@@ -438,19 +461,36 @@ import wave
 import numpy as np
 import sherpa_onnx
 
-model = sys.argv[1]
+mode = sys.argv[1]
 tokens = sys.argv[2]
-audio_path = sys.argv[3]
-language = sys.argv[4]
+model = sys.argv[3]
+encoder = sys.argv[4]
+decoder = sys.argv[5]
+joiner = sys.argv[6]
+audio_path = sys.argv[7]
+language = sys.argv[8]
 
-recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
-    model=model,
-    tokens=tokens,
-    num_threads=1,
-    provider="cpu",
-    decoding_method="greedy_search",
-    debug=False,
-)
+if mode == "ctc":
+    recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
+        model=model,
+        tokens=tokens,
+        num_threads=1,
+        provider="cpu",
+        decoding_method="greedy_search",
+        debug=False,
+    )
+else:
+    recognizer = sherpa_onnx.OfflineRecognizer.from_transducer(
+        encoder=encoder,
+        decoder=decoder,
+        joiner=joiner,
+        tokens=tokens,
+        num_threads=1,
+        provider="cpu",
+        decoding_method="greedy_search",
+        debug=False,
+        model_type="nemo_transducer",
+    )
 
 with wave.open(audio_path, "rb") as wf:
     sample_rate = wf.getframerate()
@@ -478,11 +518,36 @@ text = stream.result.text.strip()
 print(text)
 "#;
 
+    let model_arg = model_files
+        .model
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let encoder_arg = model_files
+        .encoder
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let decoder_arg = model_files
+        .decoder
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+    let joiner_arg = model_files
+        .joiner
+        .as_ref()
+        .map(|path| path.to_string_lossy().to_string())
+        .unwrap_or_default();
+
     let output = Command::new(&python)
         .arg("-c")
         .arg(python_script)
-        .arg(model_files.model)
-        .arg(model_files.tokens)
+        .arg(if model_files.model.is_some() { "ctc" } else { "transducer" })
+        .arg(&model_files.tokens)
+        .arg(model_arg)
+        .arg(encoder_arg)
+        .arg(decoder_arg)
+        .arg(joiner_arg)
         .arg(audio_path)
         .arg(language)
         .output()
@@ -728,8 +793,11 @@ fn sherpa_model_dir_path() -> PathBuf {
 }
 
 struct SherpaModelFiles {
-    model: PathBuf,
     tokens: PathBuf,
+    model: Option<PathBuf>,
+    encoder: Option<PathBuf>,
+    decoder: Option<PathBuf>,
+    joiner: Option<PathBuf>,
 }
 
 fn sherpa_model_files(model_dir: &Path) -> Option<SherpaModelFiles> {
@@ -738,18 +806,57 @@ fn sherpa_model_files(model_dir: &Path) -> Option<SherpaModelFiles> {
         return None;
     }
 
-    let model_candidates = [
+    let model = [
         model_dir.join("model.int8.onnx"),
         model_dir.join("model.onnx"),
-    ];
+    ]
+    .iter()
+    .find(|path| path.is_file())
+    .cloned();
 
-    model_candidates
-        .iter()
-        .find(|path| path.is_file())
-        .map(|model| SherpaModelFiles {
-            model: model.to_path_buf(),
+    if model.is_some() {
+        return Some(SherpaModelFiles {
             tokens,
-        })
+            model,
+            encoder: None,
+            decoder: None,
+            joiner: None,
+        });
+    }
+
+    let encoder = [
+        model_dir.join("encoder.int8.onnx"),
+        model_dir.join("encoder.onnx"),
+    ]
+    .iter()
+    .find(|path| path.is_file())
+    .cloned();
+    let decoder = [
+        model_dir.join("decoder.int8.onnx"),
+        model_dir.join("decoder.onnx"),
+    ]
+    .iter()
+    .find(|path| path.is_file())
+    .cloned();
+    let joiner = [
+        model_dir.join("joiner.int8.onnx"),
+        model_dir.join("joiner.onnx"),
+    ]
+    .iter()
+    .find(|path| path.is_file())
+    .cloned();
+
+    if encoder.is_some() && decoder.is_some() && joiner.is_some() {
+        return Some(SherpaModelFiles {
+            tokens,
+            model: None,
+            encoder,
+            decoder,
+            joiner,
+        });
+    }
+
+    None
 }
 
 fn twokey_managed_bin_path(name: &str) -> PathBuf {
@@ -854,7 +961,7 @@ fn ensure_sherpa_model_downloaded() -> Result<(), String> {
     }
 
     if sherpa_model_files(&model_dir).is_none() {
-        return Err("sherpa-onnx Modell wurde entpackt, aber benoetigte Dateien fehlen (tokens.txt/model.onnx).".to_string());
+        return Err("sherpa-onnx Modell wurde entpackt, aber benoetigte Dateien fehlen (tokens.txt plus model.onnx oder encoder/decoder/joiner.onnx).".to_string());
     }
 
     Ok(())

@@ -204,8 +204,8 @@ fn get_sherpa_onnx_diagnostics() -> stt::SherpaOnnxDiagnostics {
 }
 
 #[tauri::command]
-fn ensure_sherpa_onnx_runtime() -> Result<String, String> {
-    stt::ensure_sherpa_onnx_runtime()
+fn ensure_sherpa_onnx_runtime(sudo_password: Option<String>) -> Result<String, String> {
+    stt::ensure_sherpa_onnx_runtime(sudo_password.as_deref())
 }
 
 #[tauri::command]

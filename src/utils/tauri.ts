@@ -525,12 +525,12 @@ export async function getSherpaOnnxDiagnostics(): Promise<SherpaOnnxDiagnostics>
   return invoke<SherpaOnnxDiagnostics>("get_sherpa_onnx_diagnostics");
 }
 
-export async function ensureSherpaOnnxRuntime(): Promise<string> {
+export async function ensureSherpaOnnxRuntime(sudoPassword?: string | null): Promise<string> {
   if (!isTauriRuntime()) {
     throw new Error("Browser-Vorschau kann keine sherpa-onnx Runtime installieren.");
   }
 
-  return invoke<string>("ensure_sherpa_onnx_runtime");
+  return invoke<string>("ensure_sherpa_onnx_runtime", { sudoPassword: sudoPassword ?? null });
 }
 
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
