@@ -214,13 +214,14 @@ function OverlayApp() {
       }
 
       if (event.kind === "transcript-ready" && event.transcript) {
+        const transcript = event.transcript;
         setManualCaptureActive(false);
         if (modeRef.current === "conversation") {
           setStatus("thinking");
           setEventMessage("Pruefe Toolchains...");
           setAssistantAnswer(null);
 
-          runToolchainFromText(event.transcript)
+          runToolchainFromText(transcript)
             .then((toolchainMessage) => {
               if (toolchainMessage) {
                 if (!mounted) {
@@ -232,7 +233,7 @@ function OverlayApp() {
               }
 
               setEventMessage("Assistent denkt...");
-              return askAssistant(buildConversationPrompt(event.transcript, fileContext), fileContext)
+              return askAssistant(buildConversationPrompt(transcript, fileContext), fileContext)
                 .then((answer) => {
                   if (!mounted) {
                     return;
@@ -271,7 +272,7 @@ function OverlayApp() {
                 [
                   "Bearbeite den folgenden markierten Text gemaess Anweisung.",
                   "Gib ausschliesslich den finalen Ersatztext aus, ohne Erklaerung.",
-                  `Anweisung: ${event.transcript}`,
+                  `Anweisung: ${transcript}`,
                   "Markierter Text:",
                   selectedText,
                 ].join("\n\n"),
@@ -306,7 +307,7 @@ function OverlayApp() {
           setStatus("writing");
           setEventMessage("Fuege Diktat ein...");
 
-          insertText(event.transcript)
+          insertText(transcript)
             .then(() => {
               if (!mounted) {
                 return;
@@ -325,7 +326,7 @@ function OverlayApp() {
             });
         } else if (modeRef.current === "feedback") {
           setStatus("thinking");
-          submitFeedback(event.transcript)
+          submitFeedback(transcript)
             .then((message) => {
               if (!mounted) {
                 return;
