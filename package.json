@@ -1,6 +1,6 @@
 {
   "name": "twokey",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Linux-first desktop AI assistant built with Tauri, React, and TypeScript.",
   "license": "MIT",
   "repository": {
@@ -15,6 +15,9 @@
   "main": "./lib/index.js",
   "module": "./lib/index.js",
   "types": "./lib/index.d.ts",
+  "bin": {
+    "twokey": "./bin/twokey.js"
+  },
   "exports": {
     ".": {
       "types": "./lib/index.d.ts",
@@ -23,6 +26,7 @@
     }
   },
   "files": [
+    "bin",
     "lib",
     "README.md",
     "LICENSE"

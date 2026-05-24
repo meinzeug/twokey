@@ -22,6 +22,20 @@ No TTS or text injection is implemented yet.
 npm install twokey
 ```
 
+Start the tool directly:
+
+```bash
+twokey
+```
+
+Useful CLI options:
+
+```bash
+twokey --help
+twokey --once "Erklaere kurz den Unterschied zwischen X11 und Wayland"
+twokey --desktop
+```
+
 ## Minimal Usage
 
 ```ts
