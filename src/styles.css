@@ -445,6 +445,32 @@ p {
   accent-color: #75e0c3;
 }
 
+.provider-list {
+  display: grid;
+  gap: 8px;
+}
+
+.provider-row {
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  display: grid;
+  gap: 4px;
+  padding: 10px;
+  background: rgba(255, 255, 255, 0.035);
+}
+
+.provider-row strong {
+  color: #edf3fb;
+  font-size: 13px;
+}
+
+.provider-row span,
+.provider-row small {
+  color: #96a4b6;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .settings-shell.loading {
   display: grid;
   place-items: center;

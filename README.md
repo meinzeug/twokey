@@ -102,6 +102,12 @@ Phase 7 settings behavior:
 - The settings window saves general, hotkey, STT, Ollama, privacy, and update-channel values.
 - Some settings are stored before they are fully applied at runtime; later phases will wire them into the helper/provider layers.
 
+Phase 8 provider behavior:
+
+- Ollama chat is routed through a provider abstraction.
+- Provider metadata is exposed to the settings UI.
+- OpenAI-compatible and OpenRouter-compatible providers are visible as planned online providers, but disabled until API-key storage and routing are implemented.
+
 Build the frontend:
 
 ```bash

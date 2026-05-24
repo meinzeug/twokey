@@ -40,6 +40,18 @@ export type AppSettings = {
   updateChannel: string;
 };
 
+export type ProviderInfo = {
+  id: string;
+  label: string;
+  kind: string;
+  enabled: boolean;
+  supportsChat: boolean;
+  supportsStt: boolean;
+  supportsTts: boolean;
+  supportsVision: boolean;
+  note: string;
+};
+
 export async function getDesktopSessionType(): Promise<string> {
   if (!isTauriRuntime()) {
     return "browser-preview";
@@ -139,6 +151,14 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   }
 
   await invoke("save_settings", { settings });
+}
+
+export async function listProviders(): Promise<ProviderInfo[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<ProviderInfo[]>("list_providers");
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {

@@ -1,7 +1,6 @@
 use serde::{Deserialize, Serialize};
 
 const DEFAULT_OLLAMA_URL: &str = "http://127.0.0.1:11434";
-const DEFAULT_MODEL: &str = "qwen2.5:3b";
 
 #[derive(Serialize)]
 struct ChatRequest {
@@ -33,12 +32,11 @@ struct ChatResponseMessage {
     content: String,
 }
 
-pub fn chat(prompt: &str) -> Result<String, String> {
+pub fn chat_with_model(prompt: &str, model: &str) -> Result<String, String> {
     let base_url = std::env::var("TWOKEY_OLLAMA_URL").unwrap_or_else(|_| DEFAULT_OLLAMA_URL.to_string());
-    let model = std::env::var("TWOKEY_OLLAMA_MODEL").unwrap_or_else(|_| DEFAULT_MODEL.to_string());
 
     let request = ChatRequest {
-        model: model.clone(),
+        model: model.to_string(),
         stream: false,
         messages: vec![
             ChatMessage {

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 7: Settings UI.
+Phase 8: Provider-System.
 
 ## Completed
 
@@ -41,6 +41,9 @@ Phase 7: Settings UI.
 - Text replacement requires explicit confirmation in the overlay.
 - Settings are persisted under `~/.config/twokey-ai/settings.json`.
 - Settings UI has real controls for general, hotkey, STT, Ollama, privacy, and update-channel values.
+- Ollama chat is routed through a provider abstraction.
+- Provider metadata is exposed to the settings UI.
+- OpenAI-compatible and OpenRouter-compatible providers are represented as disabled placeholders.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -68,15 +71,16 @@ Phase 7: Settings UI.
 - X11 dictation requires `xdotool` and either `xclip` or `xsel`.
 - Wayland text insertion is still unsupported and reported explicitly.
 - Some settings are persisted before all runtime systems consume them.
+- Online provider API-key storage and execution are not implemented yet.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 8: Provider-System.
+Phase 9: Datei-Kontext.
 
-Planned Phase 8 work:
+Planned Phase 9 work:
 
-- Formalize provider traits/interfaces.
-- Move Ollama behind provider abstraction.
-- Add OpenAI-compatible and OpenRouter-compatible config placeholders.
-- Add per-mode model defaults.
+- Add file picker.
+- Read TXT/MD context directly.
+- Extract PDF text where `pdftotext` is available.
+- Prepare image files for future vision-capable providers.

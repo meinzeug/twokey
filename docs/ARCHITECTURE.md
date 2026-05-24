@@ -78,11 +78,12 @@ Implemented:
 - External STT command adapter through `TWOKEY_STT_COMMAND`
 - Ollama chat provider through local HTTP API
 - Conversation mode routing from transcript to Ollama
+- Provider router with metadata for local, online, STT, TTS, and vision capabilities
 
 Not implemented:
 
 - TTS
-- OpenAI/OpenRouter providers
+- OpenAI/OpenRouter executable providers
 - SQLite storage
 - Clipboard and text replacement
 - File context extraction

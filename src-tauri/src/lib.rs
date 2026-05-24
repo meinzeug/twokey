@@ -7,6 +7,7 @@ mod audio;
 mod desktop;
 mod hotkeys;
 mod ollama;
+mod provider;
 mod settings;
 mod stt;
 
@@ -33,7 +34,7 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
 
 #[tauri::command]
 fn ask_ollama(prompt: String) -> Result<String, String> {
-    ollama::chat(&prompt)
+    provider::chat(&prompt)
 }
 
 #[tauri::command]
@@ -61,6 +62,11 @@ fn save_settings(settings: settings::AppSettings) -> Result<(), String> {
     settings::save(&settings)
 }
 
+#[tauri::command]
+fn list_providers() -> Vec<provider::ProviderInfo> {
+    provider::list()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
@@ -75,6 +81,7 @@ pub fn run() {
             get_desktop_session_type,
             get_settings,
             insert_text,
+            list_providers,
             open_settings_window,
             read_selected_text,
             replace_selected_text,

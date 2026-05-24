@@ -17,6 +17,7 @@ import {
   getDesktopCapabilities,
   getSettings,
   insertText,
+  listProviders,
   listenForHotkeyEvents,
   openSettingsWindow,
   readSelectedText,
@@ -24,6 +25,7 @@ import {
   saveSettings,
   type AppSettings,
   type DesktopCapabilities,
+  type ProviderInfo,
 } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
@@ -415,6 +417,7 @@ function OverlayApp() {
 
 function SettingsWindow() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [saveState, setSaveState] = useState("Bereit");
   const settingsSections = [
     "Allgemein",
@@ -430,6 +433,7 @@ function SettingsWindow() {
     getSettings()
       .then(setSettings)
       .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+    listProviders().then(setProviders).catch(() => setProviders([]));
   }, []);
 
   const updateSetting = <Key extends keyof AppSettings>(key: Key, value: AppSettings[Key]) => {
@@ -543,6 +547,15 @@ function SettingsWindow() {
               <span>Lokal bevorzugen</span>
               <input type="checkbox" checked={settings.preferLocal} onChange={(event) => updateSetting("preferLocal", event.target.checked)} />
             </label>
+            <div className="provider-list">
+              {providers.map((provider) => (
+                <div className="provider-row" key={provider.id}>
+                  <strong>{provider.label}</strong>
+                  <span>{provider.enabled ? "aktiv" : "geplant"} · {provider.kind}</span>
+                  <small>{provider.note}</small>
+                </div>
+              ))}
+            </div>
           </SettingsGroup>
 
           <SettingsGroup title="Datenschutz und Updates">
