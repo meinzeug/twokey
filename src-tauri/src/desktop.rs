@@ -6,6 +6,11 @@ use std::{
 };
 
 pub fn insert_text(text: &str) -> Result<(), String> {
+    let session_type = session_type();
+    if session_type == "wayland" {
+        return insert_text_wayland(text);
+    }
+
     ensure_x11_automation("Texteinfuegung")?;
     let clipboard = ClipboardTool::detect()?;
     let previous_clipboard = clipboard.read().ok();
@@ -36,6 +41,13 @@ pub fn insert_text(text: &str) -> Result<(), String> {
 }
 
 pub fn read_selected_text() -> Result<String, String> {
+    if session_type() == "wayland" {
+        return Err(
+            "Textauswahl lesen ist unter Wayland nur compositor-spezifisch moeglich. Nutze derzeit Clipboard + Einfuegen als Fallback."
+                .to_string(),
+        );
+    }
+
     ensure_x11_automation("Textauswahl lesen")?;
     let clipboard = ClipboardTool::detect()?;
     let previous_clipboard = clipboard.read().ok();
@@ -73,7 +85,7 @@ pub fn replace_selected_text(text: &str) -> Result<(), String> {
 }
 
 fn ensure_x11_automation(action: &str) -> Result<(), String> {
-    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string());
+    let session_type = session_type();
     if session_type != "x11" {
         return Err(format!(
             "{action} ist aktuell nur unter X11 implementiert. Wayland folgt mit expliziten Portalen/Fallbacks."
@@ -85,6 +97,44 @@ fn ensure_x11_automation(action: &str) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn insert_text_wayland(text: &str) -> Result<(), String> {
+    if command_exists("wtype") {
+        let status = Command::new("wtype")
+            .arg(text)
+            .status()
+            .map_err(|error| format!("wtype konnte nicht gestartet werden: {error}"))?;
+
+        if status.success() {
+            return Ok(());
+        }
+
+        return Err(format!("wtype beendete sich mit Status {status}"));
+    }
+
+    if command_exists("ydotool") {
+        let status = Command::new("ydotool")
+            .arg("type")
+            .arg(text)
+            .status()
+            .map_err(|error| format!("ydotool konnte nicht gestartet werden: {error}"))?;
+
+        if status.success() {
+            return Ok(());
+        }
+
+        return Err(format!("ydotool beendete sich mit Status {status}"));
+    }
+
+    Err(
+        "Wayland-Einfuegung benoetigt wtype oder ydotool. Installiere eines der Tools fuer sicheres Tippen ohne globale Hotkey-Umgehung."
+            .to_string(),
+    )
+}
+
+fn session_type() -> String {
+    std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string())
 }
 
 enum ClipboardTool {

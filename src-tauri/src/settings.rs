@@ -3,6 +3,7 @@ use std::{fs, path::PathBuf};
 use serde::{Deserialize, Serialize};
 
 #[derive(Clone, Deserialize, Serialize)]
+#[serde(default)]
 #[serde(rename_all = "camelCase")]
 pub struct AppSettings {
     pub autostart: bool,
@@ -20,9 +21,15 @@ pub struct AppSettings {
     pub tts_voice: String,
     pub tts_speed: f32,
     pub ollama_model: String,
+    pub preferred_chat_provider: String,
+    pub openai_base_url: String,
+    pub openai_model: String,
+    pub openrouter_base_url: String,
+    pub openrouter_model: String,
     pub prefer_local: bool,
     pub save_history: bool,
     pub log_api_requests: bool,
+    pub tray_enabled: bool,
     pub update_channel: String,
 }
 
@@ -44,9 +51,15 @@ impl Default for AppSettings {
             tts_voice: "piper-default".to_string(),
             tts_speed: 1.0,
             ollama_model: "qwen2.5:3b".to_string(),
+            preferred_chat_provider: "ollama".to_string(),
+            openai_base_url: "https://api.openai.com/v1".to_string(),
+            openai_model: "gpt-4o-mini".to_string(),
+            openrouter_base_url: "https://openrouter.ai/api/v1".to_string(),
+            openrouter_model: "openai/gpt-4o-mini".to_string(),
             prefer_local: true,
             save_history: true,
             log_api_requests: false,
+            tray_enabled: true,
             update_channel: "stable".to_string(),
         }
     }

@@ -1,16 +1,30 @@
 use std::{fs, path::Path, process::Command};
 
+use crate::history;
+
 pub struct Transcript {
     pub text: String,
     pub provider: String,
 }
 
 pub fn transcribe(audio_path: &Path) -> Result<Transcript, String> {
-    if let Ok(command_template) = std::env::var("TWOKEY_STT_COMMAND") {
-        return transcribe_with_command(audio_path, &command_template);
-    }
+    let result = if let Ok(command_template) = std::env::var("TWOKEY_STT_COMMAND") {
+        transcribe_with_command(audio_path, &command_template)
+    } else {
+        mock_transcribe(audio_path)
+    };
 
-    mock_transcribe(audio_path)
+    let _ = history::record(history::AuditEvent {
+        kind: "stt".to_string(),
+        mode: None,
+        provider: result.as_ref().ok().map(|transcript| transcript.provider.clone()),
+        input_text: Some(audio_path.to_string_lossy().to_string()),
+        output_text: result.as_ref().ok().map(|transcript| transcript.text.clone()),
+        metadata_json: None,
+        success: result.is_ok(),
+    });
+
+    result
 }
 
 fn transcribe_with_command(audio_path: &Path, command_template: &str) -> Result<Transcript, String> {

@@ -13,23 +13,30 @@ import {
   X,
 } from "lucide-react";
 import {
-  askOllama,
+  askAssistant,
   addFileContext,
   checkForUpdates,
+  clearProviderApiKey,
+  getHistoryRecent,
   getDesktopCapabilities,
   getSettings,
   insertText,
   listProviders,
   listenForHotkeyEvents,
   openSettingsWindow,
+  providerApiKeyStatus,
   readSelectedText,
   replaceSelectedText,
   saveSettings,
+  setProviderApiKey,
   setAutostart,
+  speakText,
   type AppSettings,
   type DesktopCapabilities,
   type FileContext,
+  type HistoryEntry,
   type ProviderInfo,
+  type SecretStatus,
 } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
@@ -179,15 +186,24 @@ function OverlayApp() {
           setEventMessage("Ollama denkt...");
           setAssistantAnswer(null);
 
-          askOllama(buildConversationPrompt(event.transcript, fileContext))
+          askAssistant(buildConversationPrompt(event.transcript, fileContext))
             .then((answer) => {
               if (!mounted) {
                 return;
               }
 
               setStatus("ready");
-              setEventMessage("Ollama-Antwort bereit.");
+              setEventMessage("Antwort bereit.");
               setAssistantAnswer(answer);
+
+              getSettings()
+                .then((appSettings) => {
+                  if (appSettings.ttsEnabled) {
+                    return speakText(answer).catch(() => undefined);
+                  }
+                  return undefined;
+                })
+                .catch(() => undefined);
             })
             .catch((error: unknown) => {
               if (!mounted) {
@@ -204,7 +220,7 @@ function OverlayApp() {
 
           readSelectedText()
             .then((selectedText) =>
-              askOllama(
+              askAssistant(
                 [
                   "Bearbeite den folgenden markierten Text gemaess Anweisung.",
                   "Gib ausschliesslich den finalen Ersatztext aus, ohne Erklaerung.",
@@ -452,6 +468,12 @@ function buildConversationPrompt(transcript: string, context: FileContext | null
 function SettingsWindow() {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
+  const [secretStatus, setSecretStatus] = useState<Record<string, SecretStatus>>({});
+  const [apiKeyInputs, setApiKeyInputs] = useState<Record<string, string>>({
+    "openai-compatible": "",
+    openrouter: "",
+  });
+  const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
   const [saveState, setSaveState] = useState("Bereit");
   const [updateState, setUpdateState] = useState("Nicht geprueft");
   const settingsSections = [
@@ -469,6 +491,15 @@ function SettingsWindow() {
       .then(setSettings)
       .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
     listProviders().then(setProviders).catch(() => setProviders([]));
+    Promise.all([providerApiKeyStatus("openai-compatible"), providerApiKeyStatus("openrouter")])
+      .then(([openai, openrouter]) => {
+        setSecretStatus({
+          [openai.providerId]: openai,
+          [openrouter.providerId]: openrouter,
+        });
+      })
+      .catch(() => setSecretStatus({}));
+    getHistoryRecent(25).then(setHistoryEntries).catch(() => setHistoryEntries([]));
   }, []);
 
   const updateSetting = <Key extends keyof AppSettings>(key: Key, value: AppSettings[Key]) => {
@@ -483,6 +514,39 @@ function SettingsWindow() {
     sideEffect
       .then(() => saveSettings(nextSettings))
       .then(() => setSaveState("Gespeichert"))
+      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+  };
+
+  const saveProviderKey = (providerId: "openai-compatible" | "openrouter") => {
+    const value = (apiKeyInputs[providerId] ?? "").trim();
+    if (!value) {
+      setSaveState("API-Key ist leer");
+      return;
+    }
+
+    setSaveState("Speichere API-Key...");
+    setProviderApiKey(providerId, value)
+      .then(() => providerApiKeyStatus(providerId))
+      .then((status) => {
+        setSecretStatus((current) => ({ ...current, [providerId]: status }));
+        setApiKeyInputs((current) => ({ ...current, [providerId]: "" }));
+        return listProviders();
+      })
+      .then(setProviders)
+      .then(() => setSaveState("API-Key sicher gespeichert"))
+      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+  };
+
+  const removeProviderKey = (providerId: "openai-compatible" | "openrouter") => {
+    setSaveState("Entferne API-Key...");
+    clearProviderApiKey(providerId)
+      .then(() => providerApiKeyStatus(providerId))
+      .then((status) => {
+        setSecretStatus((current) => ({ ...current, [providerId]: status }));
+        return listProviders();
+      })
+      .then(setProviders)
+      .then(() => setSaveState("API-Key entfernt"))
       .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
   };
 
@@ -577,13 +641,86 @@ function SettingsWindow() {
               </select>
             </label>
             <label>
+              <span>Chat-Provider</span>
+              <select value={settings.preferredChatProvider} onChange={(event) => updateSetting("preferredChatProvider", event.target.value)}>
+                <option value="ollama">Ollama lokal</option>
+                <option value="openai-compatible">OpenAI-kompatibel</option>
+                <option value="openrouter">OpenRouter</option>
+              </select>
+            </label>
+            <label>
               <span>Ollama-Modell</span>
               <input value={settings.ollamaModel} onChange={(event) => updateSetting("ollamaModel", event.target.value)} />
+            </label>
+            <label>
+              <span>OpenAI Base URL</span>
+              <input value={settings.openaiBaseUrl} onChange={(event) => updateSetting("openaiBaseUrl", event.target.value)} />
+            </label>
+            <label>
+              <span>OpenAI Modell</span>
+              <input value={settings.openaiModel} onChange={(event) => updateSetting("openaiModel", event.target.value)} />
+            </label>
+            <label>
+              <span>OpenRouter Base URL</span>
+              <input value={settings.openrouterBaseUrl} onChange={(event) => updateSetting("openrouterBaseUrl", event.target.value)} />
+            </label>
+            <label>
+              <span>OpenRouter Modell</span>
+              <input value={settings.openrouterModel} onChange={(event) => updateSetting("openrouterModel", event.target.value)} />
             </label>
             <label>
               <span>Lokal bevorzugen</span>
               <input type="checkbox" checked={settings.preferLocal} onChange={(event) => updateSetting("preferLocal", event.target.checked)} />
             </label>
+            <label>
+              <span>TTS aktiv</span>
+              <input type="checkbox" checked={settings.ttsEnabled} onChange={(event) => updateSetting("ttsEnabled", event.target.checked)} />
+            </label>
+            <label>
+              <span>TTS Stimme</span>
+              <input value={settings.ttsVoice} onChange={(event) => updateSetting("ttsVoice", event.target.value)} />
+            </label>
+            <label>
+              <span>TTS Tempo</span>
+              <input
+                type="number"
+                min="0.5"
+                max="2.0"
+                step="0.1"
+                value={settings.ttsSpeed}
+                onChange={(event) => updateSetting("ttsSpeed", Number(event.target.value))}
+              />
+            </label>
+            <div className="provider-row">
+              <strong>OpenAI API-Key</strong>
+              <span>{secretStatus["openai-compatible"]?.configured ? "gespeichert" : "nicht gesetzt"}</span>
+              <input
+                type="password"
+                placeholder="sk-..."
+                value={apiKeyInputs["openai-compatible"] ?? ""}
+                onChange={(event) =>
+                  setApiKeyInputs((current) => ({ ...current, "openai-compatible": event.target.value }))
+                }
+              />
+              <div className="replacement-actions">
+                <button type="button" onClick={() => saveProviderKey("openai-compatible")}>Speichern</button>
+                <button type="button" onClick={() => removeProviderKey("openai-compatible")}>Loeschen</button>
+              </div>
+            </div>
+            <div className="provider-row">
+              <strong>OpenRouter API-Key</strong>
+              <span>{secretStatus.openrouter?.configured ? "gespeichert" : "nicht gesetzt"}</span>
+              <input
+                type="password"
+                placeholder="sk-or-..."
+                value={apiKeyInputs.openrouter ?? ""}
+                onChange={(event) => setApiKeyInputs((current) => ({ ...current, openrouter: event.target.value }))}
+              />
+              <div className="replacement-actions">
+                <button type="button" onClick={() => saveProviderKey("openrouter")}>Speichern</button>
+                <button type="button" onClick={() => removeProviderKey("openrouter")}>Loeschen</button>
+              </div>
+            </div>
             <div className="provider-list">
               {providers.map((provider) => (
                 <div className="provider-row" key={provider.id}>
@@ -609,6 +746,10 @@ function SettingsWindow() {
               />
             </label>
             <label>
+              <span>Tray-Menue aktiv</span>
+              <input type="checkbox" checked={settings.trayEnabled} onChange={(event) => updateSetting("trayEnabled", event.target.checked)} />
+            </label>
+            <label>
               <span>Update-Kanal</span>
               <select value={settings.updateChannel} onChange={(event) => updateSetting("updateChannel", event.target.value)}>
                 <option value="stable">stable</option>
@@ -629,6 +770,17 @@ function SettingsWindow() {
                 Nach Updates suchen
               </button>
               <span>{updateState}</span>
+            </div>
+            <div className="provider-list">
+              {historyEntries.map((entry) => (
+                <div className="provider-row" key={entry.id}>
+                  <strong>
+                    {entry.kind} {entry.success ? "ok" : "fehler"}
+                  </strong>
+                  <span>{entry.provider ?? "-"}</span>
+                  <small>{new Date(entry.tsUnixMs).toLocaleString()}</small>
+                </div>
+              ))}
             </div>
           </SettingsGroup>
         </div>

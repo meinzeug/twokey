@@ -34,9 +34,15 @@ export type AppSettings = {
   ttsVoice: string;
   ttsSpeed: number;
   ollamaModel: string;
+  preferredChatProvider: string;
+  openaiBaseUrl: string;
+  openaiModel: string;
+  openrouterBaseUrl: string;
+  openrouterModel: string;
   preferLocal: boolean;
   saveHistory: boolean;
   logApiRequests: boolean;
+  trayEnabled: boolean;
   updateChannel: string;
 };
 
@@ -67,6 +73,23 @@ export type UpdateStatus = {
   updateAvailable: boolean;
   releaseUrl?: string | null;
   message: string;
+};
+
+export type SecretStatus = {
+  providerId: string;
+  configured: boolean;
+};
+
+export type HistoryEntry = {
+  id: number;
+  tsUnixMs: number;
+  kind: string;
+  mode?: string | null;
+  provider?: string | null;
+  inputText?: string | null;
+  outputText?: string | null;
+  metadataJson?: string | null;
+  success: boolean;
 };
 
 export async function getDesktopSessionType(): Promise<string> {
@@ -108,6 +131,22 @@ export async function askOllama(prompt: string): Promise<string> {
   }
 
   return invoke<string>("ask_ollama", { prompt });
+}
+
+export async function askAssistant(prompt: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "Browser-Vorschau: Assistent ist nur in der nativen Tauri-App verfuegbar.";
+  }
+
+  return invoke<string>("ask_assistant", { prompt });
+}
+
+export async function speakText(text: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann kein TTS starten.");
+  }
+
+  return invoke<string>("speak_text", { text });
 }
 
 export async function insertText(text: string): Promise<void> {
@@ -152,9 +191,15 @@ export async function getSettings(): Promise<AppSettings> {
       ttsVoice: "piper-default",
       ttsSpeed: 1,
       ollamaModel: "qwen2.5:3b",
+      preferredChatProvider: "ollama",
+      openaiBaseUrl: "https://api.openai.com/v1",
+      openaiModel: "gpt-4o-mini",
+      openrouterBaseUrl: "https://openrouter.ai/api/v1",
+      openrouterModel: "openai/gpt-4o-mini",
       preferLocal: true,
       saveHistory: true,
       logApiRequests: false,
+      trayEnabled: true,
       updateChannel: "stable",
     };
   }
@@ -206,6 +251,38 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
   }
 
   return invoke<UpdateStatus>("check_for_updates");
+}
+
+export async function setProviderApiKey(providerId: string, apiKey: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("set_provider_api_key", { providerId, apiKey });
+}
+
+export async function clearProviderApiKey(providerId: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("clear_provider_api_key", { providerId });
+}
+
+export async function providerApiKeyStatus(providerId: string): Promise<SecretStatus> {
+  if (!isTauriRuntime()) {
+    return { providerId, configured: false };
+  }
+
+  return invoke<SecretStatus>("provider_api_key_status", { providerId });
+}
+
+export async function getHistoryRecent(limit = 50): Promise<HistoryEntry[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<HistoryEntry[]>("history_recent", { limit });
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {

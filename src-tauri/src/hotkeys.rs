@@ -50,9 +50,13 @@ pub fn capabilities() -> DesktopCapabilities {
             session_type,
             hotkeys_supported: false,
             audio_supported,
-            automation_backend: "wayland-limited".to_string(),
+            automation_backend: if has_command("wtype") || has_command("ydotool") {
+                "wayland-typed-insert".to_string()
+            } else {
+                "wayland-limited".to_string()
+            },
             warning: Some(
-                "Wayland blockiert generische globale Hold-Hotkeys. TwoKey zeigt diese Einschränkung offen an."
+                "Wayland blockiert generische globale Hold-Hotkeys. Einfuegen kann ueber wtype/ydotool funktionieren, globale Hold-Hotkeys bleiben eingeschraenkt."
                     .to_string(),
             ),
         },

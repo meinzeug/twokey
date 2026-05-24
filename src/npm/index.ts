@@ -1,4 +1,4 @@
-export type ProviderStatus = "available" | "planned-disabled";
+export type ProviderStatus = "available" | "limited" | "planned-disabled";
 
 export interface TwokeyRuntimeStatus {
   waylandGlobalHotkeys: ProviderStatus;
@@ -15,11 +15,11 @@ export interface TwokeyPackageInfo {
 }
 
 export const runtimeStatus: TwokeyRuntimeStatus = {
-  waylandGlobalHotkeys: "planned-disabled",
-  textToSpeech: "planned-disabled",
-  trayMenu: "planned-disabled",
-  sqliteHistoryAudit: "planned-disabled",
-  onlineProviders: "planned-disabled",
+  waylandGlobalHotkeys: "limited",
+  textToSpeech: "available",
+  trayMenu: "available",
+  sqliteHistoryAudit: "available",
+  onlineProviders: "available",
 };
 
 export const packageInfo: TwokeyPackageInfo = {
