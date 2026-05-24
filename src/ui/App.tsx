@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Bot,
   Check,
@@ -12,7 +12,13 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { getDesktopCapabilities, listenForHotkeyEvents, openSettingsWindow, type DesktopCapabilities } from "../utils/tauri";
+import {
+  askOllama,
+  getDesktopCapabilities,
+  listenForHotkeyEvents,
+  openSettingsWindow,
+  type DesktopCapabilities,
+} from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
 type AssistantStatus = "ready" | "listening" | "transcribing" | "thinking" | "writing" | "error";
@@ -85,8 +91,14 @@ function OverlayApp() {
   const [lastAudioPath, setLastAudioPath] = useState<string | null>(null);
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [lastProvider, setLastProvider] = useState<string | null>(null);
+  const [assistantAnswer, setAssistantAnswer] = useState<string | null>(null);
+  const modeRef = useRef(mode);
   const activeMode = modes[mode];
   const ActiveIcon = activeMode.icon;
+
+  useEffect(() => {
+    modeRef.current = mode;
+  }, [mode]);
 
   useEffect(() => {
     let mounted = true;
@@ -139,6 +151,35 @@ function OverlayApp() {
 
       if (event.provider) {
         setLastProvider(event.provider);
+      }
+
+      if (event.kind === "transcript-ready" && event.transcript) {
+        if (modeRef.current === "conversation") {
+          setStatus("thinking");
+          setEventMessage("Ollama denkt...");
+          setAssistantAnswer(null);
+
+          askOllama(event.transcript)
+            .then((answer) => {
+              if (!mounted) {
+                return;
+              }
+
+              setStatus("ready");
+              setEventMessage("Ollama-Antwort bereit.");
+              setAssistantAnswer(answer);
+            })
+            .catch((error: unknown) => {
+              if (!mounted) {
+                return;
+              }
+
+              setStatus("error");
+              setEventMessage(error instanceof Error ? error.message : String(error));
+            });
+        } else if (modeRef.current === "feedback") {
+          setEventMessage("Du bist gerade im Feedbackmodus. Wechsle den Modus per Doppeltipp oder ueber das Menue.");
+        }
       }
     }).then((cleanup) => {
       unlisten = cleanup;
@@ -255,6 +296,12 @@ function OverlayApp() {
               <p>{lastTranscript}</p>
             </div>
           ) : null}
+          {assistantAnswer ? (
+            <div className="answer-box">
+              <strong>Antwort</strong>
+              <p>{assistantAnswer}</p>
+            </div>
+          ) : null}
           {lastAudioPath ? <p className="path-text">{lastAudioPath}</p> : null}
           <p className="preview-text">{statusPreview}</p>
         </section>
@@ -295,8 +342,8 @@ function SettingsWindow() {
       <section className="settings-content">
         <div className="settings-title">
           <div>
-            <p className="eyebrow">Phase 3 Platzhalter</p>
-            <h1>Transkription ist vorbereitet</h1>
+            <p className="eyebrow">Phase 4 Platzhalter</p>
+            <h1>Ollama-Gespräch ist vorbereitet</h1>
           </div>
           <span>v0.1.0</span>
         </div>
@@ -305,7 +352,7 @@ function SettingsWindow() {
           <SettingCard title="Overlay" value="Pille, dunkles Theme, Modusmenü" />
           <SettingCard title="Hotkeys" value="Ctrl+Space ist der erste X11-Hold-Hotkey. Wayland wird explizit begrenzt gemeldet." />
           <SettingCard title="STT" value="Mock-STT ist aktiv. Echtes STT kann vorerst ueber TWOKEY_STT_COMMAND angebunden werden." />
-          <SettingCard title="Provider" value="Ollama und OpenAI-kompatible APIs ab späteren Phasen" />
+          <SettingCard title="Provider" value="Ollama laeuft lokal mit qwen2.5:3b. OpenAI-kompatible APIs folgen spaeter." />
           <SettingCard title="Datenschutz" value="XDG-Pfade, lokale Defaults und externe Warnungen geplant" />
         </div>
       </section>

@@ -76,11 +76,13 @@ Implemented:
 - CLI-backed audio recording prototype using `pw-record`, `parec`, or `arecord`
 - STT pipeline with deterministic mock provider
 - External STT command adapter through `TWOKEY_STT_COMMAND`
+- Ollama chat provider through local HTTP API
+- Conversation mode routing from transcript to Ollama
 
 Not implemented:
 
 - TTS
-- Ollama/OpenAI/OpenRouter providers
+- OpenAI/OpenRouter providers
 - SQLite storage
 - Clipboard and text replacement
 - File context extraction

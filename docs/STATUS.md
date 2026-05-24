@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 3: STT Mock + echtes STT.
+Phase 4: Gesprächsmodus mit Ollama.
 
 ## Completed
 
@@ -30,6 +30,10 @@ Phase 3: STT Mock + echtes STT.
 - External real STT command adapter implemented through `TWOKEY_STT_COMMAND`.
 - Overlay displays the latest transcript and provider.
 - X11 synthetic test verified `recording-started`, `recording-stopped`, and `transcript-ready` events.
+- Ollama installed as an enabled systemd service on `127.0.0.1:11434`.
+- Default local model `qwen2.5:3b` pulled successfully.
+- Ollama API smoke test returned a German response.
+- Conversation mode routes transcripts to Ollama and displays the answer.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -41,7 +45,7 @@ Phase 3: STT Mock + echtes STT.
 - Add a helper daemon boundary for desktop automation.
 - Add automated/manual test matrix for X11 and Wayland.
 - Add SQLite settings and history storage.
-- Add provider abstractions.
+- Add OpenAI/OpenRouter provider abstractions.
 - Add file context handling.
 
 ## Known Bugs / Limitations
@@ -53,15 +57,16 @@ Phase 3: STT Mock + echtes STT.
 - `git push origin main` is blocked in this shell because HTTPS Git credentials are not configured.
 - No bundled local Whisper model or Whisper binary is installed by the app yet.
 - `TWOKEY_STT_COMMAND` is intentionally explicit and must be configured by the developer/user for real STT.
+- Ollama is CPU-only on this machine; first response after model load may take around 20 seconds.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 4: Gesprächsmodus mit Ollama.
+Phase 5: Diktiermodus.
 
-Planned Phase 4 work:
+Planned Phase 5 work:
 
-- Add Ollama chat provider.
-- Route conversation-mode transcripts to Ollama.
-- Display assistant responses in the overlay.
-- Keep dictation and text-edit modes from calling the LLM until their phases are implemented.
+- In dictation mode, insert the transcript at the current cursor.
+- Start with X11 clipboard/xdotool insertion.
+- Preserve and restore clipboard contents.
+- Keep Wayland behavior explicit and limited.

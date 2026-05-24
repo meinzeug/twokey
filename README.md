@@ -12,8 +12,9 @@ Phase 1 implements the foundation only:
 - Initial architecture and product documentation
 - X11 Phase 2 prototype: hold `Ctrl+Space` to record audio, double tap `Ctrl+Space` to cycle modes
 - Phase 3 prototype: mock STT and external STT command adapter
+- Phase 4 prototype: local Ollama conversation mode with `qwen2.5:3b`
 
-No TTS, text injection, or AI provider calls are implemented yet.
+No TTS or text injection is implemented yet.
 
 ## Requirements
 
@@ -68,6 +69,17 @@ Example:
 
 ```bash
 TWOKEY_STT_COMMAND='whisper-cli -f {audio} --language de --no-timestamps' npm run tauri:dev
+```
+
+Phase 4 Ollama behavior:
+
+- Ollama runs as a systemd service on `127.0.0.1:11434`.
+- Default model: `qwen2.5:3b`.
+- Conversation mode sends finished transcripts to Ollama and displays the answer in the overlay.
+- Override model or endpoint with:
+
+```bash
+TWOKEY_OLLAMA_MODEL='llama3.2:3b' TWOKEY_OLLAMA_URL='http://127.0.0.1:11434' npm run tauri:dev
 ```
 
 Build the frontend:

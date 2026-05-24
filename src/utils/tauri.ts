@@ -51,6 +51,14 @@ export async function openSettingsWindow(): Promise<void> {
   await invoke("open_settings_window");
 }
 
+export async function askOllama(prompt: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "Browser-Vorschau: Ollama ist nur in der nativen Tauri-App verfuegbar.";
+  }
+
+  return invoke<string>("ask_ollama", { prompt });
+}
+
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {
   if (!isTauriRuntime()) {
     return undefined;
