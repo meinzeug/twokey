@@ -526,8 +526,15 @@ export async function setOverlayWindowExpanded(expanded: boolean): Promise<void>
   if (!isTauriRuntime()) {
     return;
   }
-
   await invoke("set_overlay_window_expanded", { expanded });
+}
+
+export async function exportDebugReport(userNotes: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keinen Debug-Bericht exportieren.");
+  }
+
+  return invoke<string>("export_debug_report", { userNotes });
 }
 
 export async function startOverlayDrag(): Promise<void> {

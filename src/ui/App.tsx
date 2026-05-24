@@ -23,6 +23,7 @@ import {
   getTtsBackendStatus,
   getRuntimeDiagnostics,
   ensureLocalWhisperRuntime,
+  exportDebugReport,
   getSettings,
   dryRunToolchainById,
   downloadLatestUpdateBackground,
@@ -704,12 +705,14 @@ function SettingsWindow() {
   const [toolchainDryRunResult, setToolchainDryRunResult] = useState<ToolchainDryRun | null>(null);
   const [whisperDiag, setWhisperDiag] = useState<LocalWhisperDiagnostics | null>(null);
   const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiagnostics | null>(null);
+  const [debugNotes, setDebugNotes] = useState("");
   const settingsSections = [
     { id: "allgemein", label: "Allgemein" },
     { id: "hotkeys", label: "Hotkeys" },
     { id: "sprache-ki", label: "Sprache und KI" },
     { id: "automationen", label: "Automationen" },
     { id: "diagnose", label: "Diagnose" },
+    { id: "debugging", label: "Debugging" },
     { id: "datenschutz-updates", label: "Datenschutz und Updates" },
   ];
 
@@ -1494,6 +1497,45 @@ function SettingsWindow() {
                   ))
                 )}
               </div>
+            </div>
+          </SettingsGroup>
+          )}
+
+          {activeSection === "debugging" && (
+          <SettingsGroup title="Debugging">
+            <p className="provider-row">
+              <strong>Debug-Bericht</strong>
+              <small>Erzeugt eine Datei mit Systeminfos, installierten Tools, TwoKey-Status und Deinen Zusatznotizen.</small>
+            </p>
+            <label>
+              <span>Zusatzinfos</span>
+              <textarea
+                value={debugNotes}
+                onChange={(event) => setDebugNotes(event.target.value)}
+                rows={8}
+                placeholder="Was ist passiert? Welche Fehlermeldung siehst Du? Was soll ich prüfen?"
+              />
+            </label>
+            <div className="update-check">
+              <button
+                type="button"
+                onClick={() => {
+                  setSaveState("Erstelle Debug-Bericht...");
+                  setSaveStateKind("saving");
+                  exportDebugReport(debugNotes)
+                    .then((path) => {
+                      setSaveState(`Debug-Datei gespeichert: ${path}`);
+                      setSaveStateKind("success");
+                    })
+                    .catch((error: unknown) => {
+                      setSaveState(error instanceof Error ? error.message : String(error));
+                      setSaveStateKind("error");
+                    });
+                }}
+              >
+                Debug-Datei speichern
+              </button>
+              <span>Es wird ein Speicherort abgefragt und danach die Datei geschrieben.</span>
             </div>
           </SettingsGroup>
           )}

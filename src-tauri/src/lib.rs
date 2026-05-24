@@ -9,6 +9,7 @@ use tauri::{
 mod audio;
 mod autostart;
 mod desktop;
+mod debug;
 mod file_context;
 mod history;
 mod hotkeys;
@@ -117,6 +118,11 @@ fn ask_assistant(prompt: String, file_context: Option<provider::ChatFileContext>
 #[tauri::command]
 fn speak_text(text: String) -> Result<String, String> {
     tts::speak_text(&text)
+}
+
+#[tauri::command]
+fn export_debug_report(user_notes: String) -> Result<String, String> {
+    debug::export_debug_report(&user_notes)
 }
 
 #[tauri::command]
@@ -390,6 +396,7 @@ pub fn run() {
             list_providers,
             get_local_whisper_diagnostics,
             ensure_local_whisper_runtime,
+            export_debug_report,
             get_runtime_diagnostics,
             open_settings_window,
             provider_api_key_status,
