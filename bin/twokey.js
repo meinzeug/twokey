@@ -1,11 +1,17 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
 import readline from "node:readline";
 
-const VERSION = "1.0.2";
+const VERSION = "1.0.3";
 const DEFAULT_MODEL = process.env.TWOKEY_OLLAMA_MODEL || "qwen2.5:3b";
 const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11434";
+const LATEST_RELEASE_API = "https://api.github.com/repos/meinzeug/twokey/releases/latest";
+const APPIMAGE_DIR = path.join(os.homedir(), ".local", "share", "twokey", "bin");
+const APPIMAGE_PATH = path.join(APPIMAGE_DIR, "twokey-ai.AppImage");
 
 const args = process.argv.slice(2);
 
@@ -55,8 +61,8 @@ if (onceIndex >= 0) {
       process.exit(0);
     }
 
-    console.error("No native desktop binary found in PATH.");
-    console.error("Install the .deb/.AppImage release and ensure 'twokey-ai' is available in PATH.");
+    console.error("Could not start desktop app.");
+    console.error("Tried system binaries and auto-download from GitHub Releases.");
     console.error("Use 'twokey --cli' to run terminal mode.");
     process.exit(1);
   });
@@ -159,7 +165,7 @@ async function launchDesktopApp() {
   if (process.env.TWOKEY_DESKTOP_CMD) {
     candidates.push(process.env.TWOKEY_DESKTOP_CMD);
   }
-  candidates.push("twokey-ai", "twokey-desktop");
+  candidates.push("twokey-ai", "twokey-desktop", APPIMAGE_PATH);
 
   for (const command of candidates) {
     const started = await spawnDetached(command);
@@ -168,7 +174,69 @@ async function launchDesktopApp() {
     }
   }
 
+  try {
+    const downloaded = await ensureLocalAppImage();
+    if (downloaded) {
+      return spawnDetached(APPIMAGE_PATH);
+    }
+  } catch {
+    return false;
+  }
+
   return false;
+}
+
+async function ensureLocalAppImage() {
+  try {
+    await fs.promises.access(APPIMAGE_PATH, fs.constants.X_OK);
+    return true;
+  } catch {
+    // Not installed yet.
+  }
+
+  await fs.promises.mkdir(APPIMAGE_DIR, { recursive: true });
+  const assetUrl = await resolveLatestAppImageUrl();
+  if (!assetUrl) {
+    return false;
+  }
+
+  const response = await fetch(assetUrl, {
+    headers: {
+      "User-Agent": "twokey-cli",
+      Accept: "application/octet-stream",
+    },
+  });
+
+  if (!response.ok) {
+    return false;
+  }
+
+  const data = Buffer.from(await response.arrayBuffer());
+  await fs.promises.writeFile(APPIMAGE_PATH, data, { mode: 0o755 });
+
+  await fs.promises.chmod(APPIMAGE_PATH, 0o755);
+  return true;
+}
+
+async function resolveLatestAppImageUrl() {
+  const response = await fetch(LATEST_RELEASE_API, {
+    headers: {
+      "User-Agent": "twokey-cli",
+      Accept: "application/vnd.github+json",
+    },
+  });
+
+  if (!response.ok) {
+    return null;
+  }
+
+  const payload = await response.json();
+  const assets = Array.isArray(payload.assets) ? payload.assets : [];
+  const appImage = assets.find(
+    (asset) => typeof asset?.name === "string" && asset.name.endsWith(".AppImage") && asset.name.includes("amd64"),
+  ) || assets.find((asset) => typeof asset?.name === "string" && asset.name.endsWith(".AppImage"));
+
+  return appImage?.browser_download_url ?? null;
 }
 
 function spawnDetached(command) {
@@ -201,4 +269,5 @@ function printHelp() {
   console.log("  --desktop        Start native desktop app in background");
   console.log("");
   console.log("Without options, twokey starts the native desktop app in background.");
+  console.log("If no desktop binary is installed, twokey tries to download an AppImage from latest GitHub release.");
 }

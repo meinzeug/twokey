@@ -29,6 +29,7 @@ twokey
 ```
 
 Default behavior: start the native desktop app in background.
+If no desktop binary is installed yet, `twokey` attempts to download an AppImage from the latest GitHub release into `~/.local/share/twokey/bin/` and starts it.
 
 Useful CLI options:
 
