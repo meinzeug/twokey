@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 6: Text markieren, lesen, ersetzen.
+Phase 7: Settings UI.
 
 ## Completed
 
@@ -39,6 +39,8 @@ Phase 6: Text markieren, lesen, ersetzen.
 - Text edit mode reads selected text under X11.
 - Text edit mode asks Ollama for a replacement using the spoken instruction.
 - Text replacement requires explicit confirmation in the overlay.
+- Settings are persisted under `~/.config/twokey-ai/settings.json`.
+- Settings UI has real controls for general, hotkey, STT, Ollama, privacy, and update-channel values.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -65,14 +67,16 @@ Phase 6: Text markieren, lesen, ersetzen.
 - Ollama is CPU-only on this machine; first response after model load may take around 20 seconds.
 - X11 dictation requires `xdotool` and either `xclip` or `xsel`.
 - Wayland text insertion is still unsupported and reported explicitly.
+- Some settings are persisted before all runtime systems consume them.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 7: Settings UI.
+Phase 8: Provider-System.
 
-Planned Phase 7 work:
+Planned Phase 8 work:
 
-- Persist basic settings under XDG config.
-- Replace placeholder settings with real controls for theme, overlay, hotkey, STT and Ollama model.
-- Keep privacy defaults visible.
+- Formalize provider traits/interfaces.
+- Move Ollama behind provider abstraction.
+- Add OpenAI-compatible and OpenRouter-compatible config placeholders.
+- Add per-mode model defaults.

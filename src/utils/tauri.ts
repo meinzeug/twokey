@@ -18,6 +18,28 @@ export type HotkeyEvent = {
   provider?: string | null;
 };
 
+export type AppSettings = {
+  autostart: boolean;
+  overlayPosition: string;
+  overlaySize: string;
+  theme: string;
+  accentColor: string;
+  mainHotkey: string;
+  doubleTapMs: number;
+  escapeCancel: boolean;
+  sttProvider: string;
+  defaultLanguage: string;
+  punctuationCleanup: boolean;
+  ttsEnabled: boolean;
+  ttsVoice: string;
+  ttsSpeed: number;
+  ollamaModel: string;
+  preferLocal: boolean;
+  saveHistory: boolean;
+  logApiRequests: boolean;
+  updateChannel: string;
+};
+
 export async function getDesktopSessionType(): Promise<string> {
   if (!isTauriRuntime()) {
     return "browser-preview";
@@ -81,6 +103,42 @@ export async function replaceSelectedText(text: string): Promise<void> {
   }
 
   await invoke("replace_selected_text", { text });
+}
+
+export async function getSettings(): Promise<AppSettings> {
+  if (!isTauriRuntime()) {
+    return {
+      autostart: false,
+      overlayPosition: "top-left",
+      overlaySize: "compact",
+      theme: "dark",
+      accentColor: "#75e0c3",
+      mainHotkey: "Ctrl+Space",
+      doubleTapMs: 420,
+      escapeCancel: true,
+      sttProvider: "mock",
+      defaultLanguage: "de",
+      punctuationCleanup: false,
+      ttsEnabled: false,
+      ttsVoice: "piper-default",
+      ttsSpeed: 1,
+      ollamaModel: "qwen2.5:3b",
+      preferLocal: true,
+      saveHistory: true,
+      logApiRequests: false,
+      updateChannel: "stable",
+    };
+  }
+
+  return invoke<AppSettings>("get_settings");
+}
+
+export async function saveSettings(settings: AppSettings): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("save_settings", { settings });
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {

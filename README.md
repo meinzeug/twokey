@@ -96,6 +96,12 @@ Phase 6 text editing behavior:
 - The overlay shows a replacement preview.
 - The selected text is replaced only after pressing `Ersetzen`.
 
+Phase 7 settings behavior:
+
+- Settings are persisted at `~/.config/twokey-ai/settings.json`.
+- The settings window saves general, hotkey, STT, Ollama, privacy, and update-channel values.
+- Some settings are stored before they are fully applied at runtime; later phases will wire them into the helper/provider layers.
+
 Build the frontend:
 
 ```bash

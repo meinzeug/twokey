@@ -7,6 +7,7 @@ mod audio;
 mod desktop;
 mod hotkeys;
 mod ollama;
+mod settings;
 mod stt;
 
 #[tauri::command]
@@ -50,10 +51,21 @@ fn replace_selected_text(text: String) -> Result<(), String> {
     desktop::replace_selected_text(&text)
 }
 
+#[tauri::command]
+fn get_settings() -> Result<settings::AppSettings, String> {
+    settings::load()
+}
+
+#[tauri::command]
+fn save_settings(settings: settings::AppSettings) -> Result<(), String> {
+    settings::save(&settings)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
         .setup(|app| {
+            let _ = settings::load();
             hotkeys::start_hotkey_service(app);
             Ok(())
         })
@@ -61,10 +73,12 @@ pub fn run() {
             ask_ollama,
             get_desktop_capabilities,
             get_desktop_session_type,
+            get_settings,
             insert_text,
             open_settings_window,
             read_selected_text,
-            replace_selected_text
+            replace_selected_text,
+            save_settings
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TwoKey Linux AI Assistant");

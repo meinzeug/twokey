@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   Bot,
   Check,
@@ -15,11 +15,14 @@ import {
 import {
   askOllama,
   getDesktopCapabilities,
+  getSettings,
   insertText,
   listenForHotkeyEvents,
   openSettingsWindow,
   readSelectedText,
   replaceSelectedText,
+  saveSettings,
+  type AppSettings,
   type DesktopCapabilities,
 } from "../utils/tauri";
 
@@ -411,6 +414,8 @@ function OverlayApp() {
 }
 
 function SettingsWindow() {
+  const [settings, setSettings] = useState<AppSettings | null>(null);
+  const [saveState, setSaveState] = useState("Bereit");
   const settingsSections = [
     "Allgemein",
     "Hotkeys",
@@ -420,6 +425,33 @@ function SettingsWindow() {
     "Datenschutz",
     "Updates",
   ];
+
+  useEffect(() => {
+    getSettings()
+      .then(setSettings)
+      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+  }, []);
+
+  const updateSetting = <Key extends keyof AppSettings>(key: Key, value: AppSettings[Key]) => {
+    if (!settings) {
+      return;
+    }
+
+    const nextSettings = { ...settings, [key]: value };
+    setSettings(nextSettings);
+    setSaveState("Speichere...");
+    saveSettings(nextSettings)
+      .then(() => setSaveState("Gespeichert"))
+      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+  };
+
+  if (!settings) {
+    return (
+      <main className="settings-shell loading">
+        <p>Settings werden geladen...</p>
+      </main>
+    );
+  }
 
   return (
     <main className="settings-shell">
@@ -442,30 +474,110 @@ function SettingsWindow() {
       <section className="settings-content">
         <div className="settings-title">
           <div>
-            <p className="eyebrow">Phase 4 Platzhalter</p>
-            <h1>Ollama-Gespräch ist vorbereitet</h1>
+            <p className="eyebrow">Phase 7</p>
+            <h1>Einstellungen</h1>
           </div>
-          <span>v0.1.0</span>
+          <span>{saveState}</span>
         </div>
 
-        <div className="settings-grid">
-          <SettingCard title="Overlay" value="Pille, dunkles Theme, Modusmenü" />
-          <SettingCard title="Hotkeys" value="Ctrl+Space ist der erste X11-Hold-Hotkey. Wayland wird explizit begrenzt gemeldet." />
-          <SettingCard title="Diktat" value="Diktiermodus fuegt Transkripte unter X11 per Clipboard und xdotool ein." />
-          <SettingCard title="Text bearbeiten" value="Markierten Text lesen, mit Ollama umformulieren und erst nach Vorschau ersetzen." />
-          <SettingCard title="Provider" value="Ollama laeuft lokal mit qwen2.5:3b. OpenAI-kompatible APIs folgen spaeter." />
-          <SettingCard title="Datenschutz" value="XDG-Pfade, lokale Defaults und externe Warnungen geplant" />
+        <div className="settings-form">
+          <SettingsGroup title="Allgemein">
+            <label>
+              <span>Autostart</span>
+              <input type="checkbox" checked={settings.autostart} onChange={(event) => updateSetting("autostart", event.target.checked)} />
+            </label>
+            <label>
+              <span>Overlay-Position</span>
+              <select value={settings.overlayPosition} onChange={(event) => updateSetting("overlayPosition", event.target.value)}>
+                <option value="top-left">Oben links</option>
+                <option value="top-right">Oben rechts</option>
+                <option value="bottom-left">Unten links</option>
+                <option value="bottom-right">Unten rechts</option>
+              </select>
+            </label>
+            <label>
+              <span>Theme</span>
+              <select value={settings.theme} onChange={(event) => updateSetting("theme", event.target.value)}>
+                <option value="dark">Dunkel</option>
+                <option value="light">Hell</option>
+                <option value="system">System</option>
+              </select>
+            </label>
+          </SettingsGroup>
+
+          <SettingsGroup title="Hotkeys">
+            <label>
+              <span>Haupt-Hotkey</span>
+              <input value={settings.mainHotkey} onChange={(event) => updateSetting("mainHotkey", event.target.value)} />
+            </label>
+            <label>
+              <span>Doppeltipp ms</span>
+              <input
+                type="number"
+                min="200"
+                max="1200"
+                value={settings.doubleTapMs}
+                onChange={(event) => updateSetting("doubleTapMs", Number(event.target.value))}
+              />
+            </label>
+            <label>
+              <span>Escape-Abbruch</span>
+              <input type="checkbox" checked={settings.escapeCancel} onChange={(event) => updateSetting("escapeCancel", event.target.checked)} />
+            </label>
+          </SettingsGroup>
+
+          <SettingsGroup title="Sprache und KI">
+            <label>
+              <span>STT-Anbieter</span>
+              <select value={settings.sttProvider} onChange={(event) => updateSetting("sttProvider", event.target.value)}>
+                <option value="mock">Mock</option>
+                <option value="external-command">Externer Befehl</option>
+                <option value="local-whisper">Lokal Whisper</option>
+              </select>
+            </label>
+            <label>
+              <span>Ollama-Modell</span>
+              <input value={settings.ollamaModel} onChange={(event) => updateSetting("ollamaModel", event.target.value)} />
+            </label>
+            <label>
+              <span>Lokal bevorzugen</span>
+              <input type="checkbox" checked={settings.preferLocal} onChange={(event) => updateSetting("preferLocal", event.target.checked)} />
+            </label>
+          </SettingsGroup>
+
+          <SettingsGroup title="Datenschutz und Updates">
+            <label>
+              <span>Verlauf speichern</span>
+              <input type="checkbox" checked={settings.saveHistory} onChange={(event) => updateSetting("saveHistory", event.target.checked)} />
+            </label>
+            <label>
+              <span>API-Anfragen protokollieren</span>
+              <input
+                type="checkbox"
+                checked={settings.logApiRequests}
+                onChange={(event) => updateSetting("logApiRequests", event.target.checked)}
+              />
+            </label>
+            <label>
+              <span>Update-Kanal</span>
+              <select value={settings.updateChannel} onChange={(event) => updateSetting("updateChannel", event.target.value)}>
+                <option value="stable">stable</option>
+                <option value="beta">beta</option>
+                <option value="dev">dev</option>
+              </select>
+            </label>
+          </SettingsGroup>
         </div>
       </section>
     </main>
   );
 }
 
-function SettingCard({ title, value }: { title: string; value: string }) {
+function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <article className="setting-card">
+    <section className="setting-card">
       <h2>{title}</h2>
-      <p>{value}</p>
-    </article>
+      <div className="setting-fields">{children}</div>
+    </section>
   );
 }
