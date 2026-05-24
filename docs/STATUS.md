@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 4: Gesprächsmodus mit Ollama.
+Phase 5: Diktiermodus.
 
 ## Completed
 
@@ -34,6 +34,8 @@ Phase 4: Gesprächsmodus mit Ollama.
 - Default local model `qwen2.5:3b` pulled successfully.
 - Ollama API smoke test returned a German response.
 - Conversation mode routes transcripts to Ollama and displays the answer.
+- Dictation mode inserts transcripts at the active cursor on X11.
+- Clipboard content is preserved and restored when `xclip` or `xsel` can read it.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -58,15 +60,17 @@ Phase 4: Gesprächsmodus mit Ollama.
 - No bundled local Whisper model or Whisper binary is installed by the app yet.
 - `TWOKEY_STT_COMMAND` is intentionally explicit and must be configured by the developer/user for real STT.
 - Ollama is CPU-only on this machine; first response after model load may take around 20 seconds.
+- X11 dictation requires `xdotool` and either `xclip` or `xsel`.
+- Wayland text insertion is still unsupported and reported explicitly.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 5: Diktiermodus.
+Phase 6: Text markieren, lesen, ersetzen.
 
-Planned Phase 5 work:
+Planned Phase 6 work:
 
-- In dictation mode, insert the transcript at the current cursor.
-- Start with X11 clipboard/xdotool insertion.
-- Preserve and restore clipboard contents.
-- Keep Wayland behavior explicit and limited.
+- Read currently selected text under X11.
+- Preview AI-edited replacement.
+- Replace selected text after confirmation.
+- Preserve clipboard contents throughout.

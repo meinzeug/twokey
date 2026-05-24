@@ -59,6 +59,14 @@ export async function askOllama(prompt: string): Promise<string> {
   return invoke<string>("ask_ollama", { prompt });
 }
 
+export async function insertText(text: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keinen Text in Desktop-Apps einfuegen.");
+  }
+
+  await invoke("insert_text", { text });
+}
+
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {
   if (!isTauriRuntime()) {
     return undefined;

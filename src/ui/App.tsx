@@ -15,6 +15,7 @@ import {
 import {
   askOllama,
   getDesktopCapabilities,
+  insertText,
   listenForHotkeyEvents,
   openSettingsWindow,
   type DesktopCapabilities,
@@ -168,6 +169,27 @@ function OverlayApp() {
               setStatus("ready");
               setEventMessage("Ollama-Antwort bereit.");
               setAssistantAnswer(answer);
+            })
+            .catch((error: unknown) => {
+              if (!mounted) {
+                return;
+              }
+
+              setStatus("error");
+              setEventMessage(error instanceof Error ? error.message : String(error));
+            });
+        } else if (modeRef.current === "dictation") {
+          setStatus("writing");
+          setEventMessage("Fuege Diktat ein...");
+
+          insertText(event.transcript)
+            .then(() => {
+              if (!mounted) {
+                return;
+              }
+
+              setStatus("ready");
+              setEventMessage("Diktat eingefuegt.");
             })
             .catch((error: unknown) => {
               if (!mounted) {
@@ -351,7 +373,7 @@ function SettingsWindow() {
         <div className="settings-grid">
           <SettingCard title="Overlay" value="Pille, dunkles Theme, Modusmenü" />
           <SettingCard title="Hotkeys" value="Ctrl+Space ist der erste X11-Hold-Hotkey. Wayland wird explizit begrenzt gemeldet." />
-          <SettingCard title="STT" value="Mock-STT ist aktiv. Echtes STT kann vorerst ueber TWOKEY_STT_COMMAND angebunden werden." />
+          <SettingCard title="Diktat" value="Diktiermodus fuegt Transkripte unter X11 per Clipboard und xdotool ein." />
           <SettingCard title="Provider" value="Ollama laeuft lokal mit qwen2.5:3b. OpenAI-kompatible APIs folgen spaeter." />
           <SettingCard title="Datenschutz" value="XDG-Pfade, lokale Defaults und externe Warnungen geplant" />
         </div>

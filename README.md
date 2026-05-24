@@ -82,6 +82,13 @@ Phase 4 Ollama behavior:
 TWOKEY_OLLAMA_MODEL='llama3.2:3b' TWOKEY_OLLAMA_URL='http://127.0.0.1:11434' npm run tauri:dev
 ```
 
+Phase 5 dictation behavior:
+
+- In dictation mode, a finished transcript is pasted at the active cursor position.
+- X11 uses `xclip` or `xsel` plus `xdotool`.
+- Clipboard content is read before insertion and restored afterward when possible.
+- Wayland insertion is deliberately reported as unsupported for now.
+
 Build the frontend:
 
 ```bash

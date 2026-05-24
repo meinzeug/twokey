@@ -4,6 +4,7 @@ use audio::AudioRecorder;
 use tauri::{AppHandle, Manager};
 
 mod audio;
+mod desktop;
 mod hotkeys;
 mod ollama;
 mod stt;
@@ -34,6 +35,11 @@ fn ask_ollama(prompt: String) -> Result<String, String> {
     ollama::chat(&prompt)
 }
 
+#[tauri::command]
+fn insert_text(text: String) -> Result<(), String> {
+    desktop::insert_text(&text)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
@@ -45,6 +51,7 @@ pub fn run() {
             ask_ollama,
             get_desktop_capabilities,
             get_desktop_session_type,
+            insert_text,
             open_settings_window
         ])
         .run(tauri::generate_context!())
