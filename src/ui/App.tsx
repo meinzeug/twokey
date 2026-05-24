@@ -20,9 +20,11 @@ import {
   getHistoryRecent,
   getDesktopCapabilities,
   getLocalWhisperDiagnostics,
+  getSherpaOnnxDiagnostics,
   getTtsBackendStatus,
   getRuntimeDiagnostics,
   ensureLocalWhisperRuntime,
+  ensureSherpaOnnxRuntime,
   exportDebugReport,
   getSettings,
   dryRunToolchainById,
@@ -58,6 +60,7 @@ import {
   type OpenRouterModelInfo,
   type ProviderInfo,
   type RuntimeDiagnostics,
+  type SherpaOnnxDiagnostics,
   type SecretStatus,
   type Toolchain,
   type ToolchainDryRun,
@@ -706,6 +709,7 @@ function SettingsWindow() {
   const [updateState, setUpdateState] = useState("Nicht geprueft");
   const [toolchainDryRunResult, setToolchainDryRunResult] = useState<ToolchainDryRun | null>(null);
   const [whisperDiag, setWhisperDiag] = useState<LocalWhisperDiagnostics | null>(null);
+  const [sherpaDiag, setSherpaDiag] = useState<SherpaOnnxDiagnostics | null>(null);
   const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiagnostics | null>(null);
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModelInfo[]>([]);
   const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
@@ -745,6 +749,7 @@ function SettingsWindow() {
       .catch(() => setSecretStatus({}));
     getHistoryRecent(25).then(setHistoryEntries).catch(() => setHistoryEntries([]));
     getLocalWhisperDiagnostics().then(setWhisperDiag).catch(() => setWhisperDiag(null));
+    getSherpaOnnxDiagnostics().then(setSherpaDiag).catch(() => setSherpaDiag(null));
     getRuntimeDiagnostics().then(setRuntimeDiag).catch(() => setRuntimeDiag(null));
     listToolchains().then(setToolchains).catch(() => setToolchains([]));
   }, []);
@@ -816,12 +821,16 @@ function SettingsWindow() {
       warnings.push("Lokal Whisper ist unvollstaendig eingerichtet. Fuehre Runtime-Setup aus.");
     }
 
+    if (settings.sttProvider === "sherpa-onnx" && sherpaDiag && (!sherpaDiag.runtimeAvailable || !sherpaDiag.modelAvailable)) {
+      warnings.push("sherpa-onnx ist unvollstaendig eingerichtet. Fuehre Runtime-Setup aus.");
+    }
+
     if (settings.ttsEnabled && runtimeDiag && !runtimeDiag.tts.available) {
       warnings.push("TTS ist aktiviert, aber kein TTS-Backend wurde gefunden.");
     }
 
     return warnings;
-  }, [settings, providers, secretStatus, whisperDiag, runtimeDiag]);
+  }, [settings, providers, secretStatus, whisperDiag, sherpaDiag, runtimeDiag]);
 
   const openRouterFilteredModels = useMemo(() => {
     if (!settings) {
@@ -838,10 +847,11 @@ function SettingsWindow() {
   const refreshRuntimeDiagnostics = () => {
     setSaveState("Aktualisiere Diagnose...");
     setSaveStateKind("saving");
-    Promise.all([getRuntimeDiagnostics(), getLocalWhisperDiagnostics(), getHistoryRecent(25)])
-      .then(([diag, whisper, recent]) => {
+    Promise.all([getRuntimeDiagnostics(), getLocalWhisperDiagnostics(), getSherpaOnnxDiagnostics(), getHistoryRecent(25)])
+      .then(([diag, whisper, sherpa, recent]) => {
         setRuntimeDiag(diag);
         setWhisperDiag(whisper);
+        setSherpaDiag(sherpa);
         setHistoryEntries(recent);
         setSaveState("Diagnose aktualisiert");
         setSaveStateKind("success");
@@ -974,6 +984,10 @@ function SettingsWindow() {
       return;
     }
 
+    if (settings[key] === value) {
+      return;
+    }
+
     if (key === "preferredChatProvider") {
       const provider = providers.find((item) => item.id === String(value));
       if (provider && !provider.enabled) {
@@ -990,36 +1004,99 @@ function SettingsWindow() {
     }
 
     if (key === "sttProvider" && value === "local-whisper") {
-      const shouldInstall = window.confirm("Lokales Whisper wurde ausgewaehlt. Soll Whisper inklusive ffmpeg jetzt vorbereitet werden?");
-      if (!shouldInstall) {
-        setSaveState("Whisper-Setup abgebrochen");
-        setSaveStateKind("error");
-        return;
-      }
-
-      const sudoPassword = window.prompt("Optional: sudo-Passwort eingeben, falls ffmpeg installiert werden muss:");
-      if (sudoPassword === null) {
-        setSaveState("Whisper-Setup abgebrochen");
-        setSaveStateKind("error");
-        return;
-      }
-
-      setSaveState("Installiere Whisper-Runtime...");
-      setSaveStateKind("installing");
-      ensureLocalWhisperRuntime(sudoPassword)
-        .then((message) => {
-          setSaveState(message);
-          setSaveStateKind("success");
+      setSaveState("Pruefe Whisper-Runtime...");
+      setSaveStateKind("saving");
+      getLocalWhisperDiagnostics()
+        .then((diag) => {
+          setWhisperDiag(diag);
 
           const nextSettings = { ...settings, [key]: value };
-          setSettings(nextSettings);
-          setSaveState("Speichere local-whisper...");
-          setSaveStateKind("saving");
-          return saveSettings(nextSettings).then(() => refreshRuntimeDiagnostics());
+          if (diag.whisperAvailable && diag.ffmpegAvailable) {
+            setSettings(nextSettings);
+            setSaveState("Speichere local-whisper...");
+            setSaveStateKind("saving");
+            return saveSettings(nextSettings)
+              .then(() => refreshRuntimeDiagnostics())
+              .then(() => {
+                setSaveState("Gespeichert, Whisper-Runtime war bereits installiert");
+                setSaveStateKind("success");
+              });
+          }
+
+          const shouldInstall = window.confirm("Lokales Whisper wurde ausgewaehlt. Soll Whisper inklusive ffmpeg jetzt vorbereitet werden?");
+          if (!shouldInstall) {
+            throw new Error("Whisper-Setup abgebrochen");
+          }
+
+          const sudoPassword = window.prompt("Optional: sudo-Passwort eingeben, falls ffmpeg installiert werden muss:");
+          if (sudoPassword === null) {
+            throw new Error("Whisper-Setup abgebrochen");
+          }
+
+          setSaveState("Installiere Whisper-Runtime...");
+          setSaveStateKind("installing");
+          return ensureLocalWhisperRuntime(sudoPassword)
+            .then((message) => {
+              setSaveState(message);
+              setSaveStateKind("success");
+              setSettings(nextSettings);
+              setSaveState("Speichere local-whisper...");
+              setSaveStateKind("saving");
+              return saveSettings(nextSettings).then(() => refreshRuntimeDiagnostics());
+            })
+            .then(() => {
+              setSaveState("Gespeichert, Whisper-Runtime installiert");
+              setSaveStateKind("success");
+            });
         })
-        .then(() => {
-          setSaveState("Gespeichert, Whisper-Runtime installiert");
-          setSaveStateKind("success");
+        .catch((error: unknown) => {
+          setSaveState(error instanceof Error ? error.message : String(error));
+          setSaveStateKind("error");
+        });
+
+      return;
+    }
+
+    if (key === "sttProvider" && value === "sherpa-onnx") {
+      setSaveState("Pruefe sherpa-onnx Runtime...");
+      setSaveStateKind("saving");
+      getSherpaOnnxDiagnostics()
+        .then((diag) => {
+          setSherpaDiag(diag);
+
+          const nextSettings = { ...settings, [key]: value };
+          if (diag.runtimeAvailable && diag.modelAvailable) {
+            setSettings(nextSettings);
+            setSaveState("Speichere sherpa-onnx...");
+            setSaveStateKind("saving");
+            return saveSettings(nextSettings)
+              .then(() => refreshRuntimeDiagnostics())
+              .then(() => {
+                setSaveState("Gespeichert, sherpa-onnx war bereits installiert");
+                setSaveStateKind("success");
+              });
+          }
+
+          const shouldInstall = window.confirm("sherpa-onnx wurde ausgewaehlt. Soll Runtime und Modell jetzt vorbereitet werden?");
+          if (!shouldInstall) {
+            throw new Error("sherpa-onnx-Setup abgebrochen");
+          }
+
+          setSaveState("Installiere sherpa-onnx Runtime...");
+          setSaveStateKind("installing");
+          return ensureSherpaOnnxRuntime()
+            .then((message) => {
+              setSaveState(message);
+              setSaveStateKind("success");
+              setSettings(nextSettings);
+              setSaveState("Speichere sherpa-onnx...");
+              setSaveStateKind("saving");
+              return saveSettings(nextSettings).then(() => refreshRuntimeDiagnostics());
+            })
+            .then(() => {
+              setSaveState("Gespeichert, sherpa-onnx installiert");
+              setSaveStateKind("success");
+            });
         })
         .catch((error: unknown) => {
           setSaveState(error instanceof Error ? error.message : String(error));
@@ -1270,6 +1347,7 @@ function SettingsWindow() {
                 <option value="mock">Mock</option>
                 <option value="external-command">Externer Befehl</option>
                 <option value="local-whisper">Lokal Whisper</option>
+                <option value="sherpa-onnx">Sherpa ONNX</option>
                 <option value="openai-compatible">OpenAI-kompatibel</option>
               </select>
             </label>
@@ -1318,6 +1396,36 @@ function SettingsWindow() {
                           .then((diag) => {
                             setWhisperDiag(diag);
                             setSaveState("Whisper-Diagnose aktualisiert");
+                            setSaveStateKind("success");
+                          })
+                          .catch((error: unknown) => {
+                            setSaveState(error instanceof Error ? error.message : String(error));
+                            setSaveStateKind("error");
+                          });
+                      }}
+                    >
+                      Diagnose aktualisieren
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+            {settings.sttProvider === "sherpa-onnx" && (
+              <>
+                <div className="provider-row">
+                  <small>Nutze ein lokales sherpa-onnx Modell (NVIDIA NeMo Parakeet, offline).</small>
+                  <small>{sherpaDiag?.message ?? "Diagnose nicht verfuegbar"}</small>
+                  <small>sherpa Runtime: {sherpaDiag?.runtimeAvailable ? "bereit" : "fehlt"} | Modell: {sherpaDiag?.modelAvailable ? "bereit" : "fehlt"}</small>
+                  <div className="replacement-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSaveState("Pruefe sherpa-onnx Runtime...");
+                        setSaveStateKind("saving");
+                        getSherpaOnnxDiagnostics()
+                          .then((diag) => {
+                            setSherpaDiag(diag);
+                            setSaveState("sherpa-onnx-Diagnose aktualisiert");
                             setSaveStateKind("success");
                           })
                           .catch((error: unknown) => {

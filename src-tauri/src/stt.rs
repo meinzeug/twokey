@@ -26,6 +26,19 @@ pub struct LocalWhisperDiagnostics {
     pub message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SherpaOnnxDiagnostics {
+    pub runtime_available: bool,
+    pub model_available: bool,
+    pub managed_venv_path: String,
+    pub managed_model_path: String,
+    pub message: String,
+}
+
+const SHERPA_MODEL_ARCHIVE_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2";
+const SHERPA_MODEL_DIR_NAME: &str = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8";
+
 #[derive(Deserialize)]
 struct OpenAITranscriptionResponse {
     text: String,
@@ -46,6 +59,7 @@ pub fn transcribe(audio_path: &Path) -> Result<Transcript, String> {
             command_template.and_then(|template| transcribe_with_command(audio_path, &template))
         }
         "openai-compatible" => transcribe_with_openai_compatible(audio_path),
+        "sherpa-onnx" => transcribe_with_sherpa_onnx(audio_path, &app_settings.default_language),
         _ => {
             if let Ok(command_template) = std::env::var("TWOKEY_STT_COMMAND") {
                 transcribe_with_command(audio_path, &command_template)
@@ -66,6 +80,45 @@ pub fn transcribe(audio_path: &Path) -> Result<Transcript, String> {
     });
 
     result
+}
+
+pub fn ensure_sherpa_onnx_installed() -> Result<(), String> {
+    if !command_exists("python3") {
+        return Err("python3 wurde nicht gefunden. sherpa-onnx benoetigt eine Python-Runtime.".to_string());
+    }
+
+    install_sherpa_in_venv()
+}
+
+pub fn ensure_sherpa_onnx_runtime() -> Result<String, String> {
+    ensure_sherpa_onnx_installed()?;
+    ensure_sherpa_model_downloaded()?;
+    Ok("sherpa-onnx Runtime und Modell sind bereit.".to_string())
+}
+
+pub fn sherpa_onnx_diagnostics() -> SherpaOnnxDiagnostics {
+    let venv_python = sherpa_venv_python_path();
+    let model_dir = sherpa_model_dir_path();
+    let runtime_available = venv_python.is_file();
+    let model_available = sherpa_model_files(&model_dir).is_some();
+
+    let message = if runtime_available && model_available {
+        "sherpa-onnx ist bereit.".to_string()
+    } else if !runtime_available && !model_available {
+        "Weder sherpa-onnx Runtime noch Modell sind bereit. Fuehre Runtime-Setup aus.".to_string()
+    } else if !runtime_available {
+        "sherpa-onnx Runtime fehlt. Runtime-Setup erforderlich.".to_string()
+    } else {
+        "sherpa-onnx Modell fehlt. Runtime-Setup erforderlich.".to_string()
+    };
+
+    SherpaOnnxDiagnostics {
+        runtime_available,
+        model_available,
+        managed_venv_path: sherpa_venv_path().to_string_lossy().to_string(),
+        managed_model_path: model_dir.to_string_lossy().to_string(),
+        message,
+    }
 }
 
 pub fn ensure_local_whisper_installed() -> Result<(), String> {
@@ -355,6 +408,114 @@ fn transcribe_with_local_whisper(
     ))
 }
 
+fn transcribe_with_sherpa_onnx(audio_path: &Path, language: &str) -> Result<Transcript, String> {
+    ensure_sherpa_onnx_runtime()?;
+
+    if !audio_path.is_file() {
+        return Err(format!(
+            "Audiodatei fuer Transkription wurde nicht gefunden: {}",
+            audio_path.to_string_lossy()
+        ));
+    }
+
+    let clip_duration = estimate_audio_duration_secs(audio_path);
+    if clip_duration.is_some_and(|duration| duration < 0.9) {
+        return Err("Aufnahme zu kurz fuer verlaessliche Transkription. Bitte Hotkey laenger halten und den Satz komplett sprechen.".to_string());
+    }
+
+    let model_dir = sherpa_model_dir_path();
+    let model_files = sherpa_model_files(&model_dir)
+        .ok_or_else(|| "sherpa-onnx Modell-Dateien wurden nicht gefunden. Fuehre Runtime-Setup erneut aus.".to_string())?;
+
+    let python = sherpa_venv_python_path();
+    if !python.is_file() {
+        return Err("sherpa-onnx Python-Runtime fehlt. Fuehre Runtime-Setup erneut aus.".to_string());
+    }
+
+    let python_script = r#"
+import sys
+import wave
+import numpy as np
+import sherpa_onnx
+
+model = sys.argv[1]
+tokens = sys.argv[2]
+audio_path = sys.argv[3]
+language = sys.argv[4]
+
+recognizer = sherpa_onnx.OfflineRecognizer.from_nemo_ctc(
+    model=model,
+    tokens=tokens,
+    num_threads=1,
+    provider="cpu",
+    decoding_method="greedy_search",
+    debug=False,
+)
+
+with wave.open(audio_path, "rb") as wf:
+    sample_rate = wf.getframerate()
+    channels = wf.getnchannels()
+    sample_width = wf.getsampwidth()
+    frames = wf.readframes(wf.getnframes())
+
+if sample_width != 2:
+    raise RuntimeError("Unsupported WAV sample width. Expected 16-bit PCM.")
+
+audio = np.frombuffer(frames, dtype=np.int16).astype(np.float32) / 32768.0
+if channels > 1:
+    audio = audio.reshape(-1, channels)[:, 0]
+
+stream = recognizer.create_stream()
+if language:
+    try:
+        stream.set_option("language", language)
+    except Exception:
+        pass
+
+stream.accept_waveform(sample_rate, audio)
+recognizer.decode_stream(stream)
+text = stream.result.text.strip()
+print(text)
+"#;
+
+    let output = Command::new(&python)
+        .arg("-c")
+        .arg(python_script)
+        .arg(model_files.model)
+        .arg(model_files.tokens)
+        .arg(audio_path)
+        .arg(language)
+        .output()
+        .map_err(|error| format!("sherpa-onnx konnte nicht gestartet werden: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("Exit-Code {}", output.status)
+        };
+
+        return Err(format!("sherpa-onnx Transkription fehlgeschlagen: {detail}"));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() {
+        return Ok(Transcript {
+            text: "Keine Sprache erkannt.".to_string(),
+            provider: "sherpa-onnx".to_string(),
+        });
+    }
+
+    Ok(Transcript {
+        text: sanitize_transcript(&text),
+        provider: "sherpa-onnx".to_string(),
+    })
+}
+
 fn unique_whisper_output_dir() -> PathBuf {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -534,6 +695,63 @@ fn whisper_venv_path() -> PathBuf {
     PathBuf::from(".twokey-whisper-venv")
 }
 
+fn sherpa_venv_path() -> PathBuf {
+    if let Ok(home) = env::var("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("twokey")
+            .join("sherpa-venv");
+    }
+
+    PathBuf::from(".twokey-sherpa-venv")
+}
+
+fn sherpa_venv_python_path() -> PathBuf {
+    sherpa_venv_path().join("bin").join("python")
+}
+
+fn sherpa_models_root_path() -> PathBuf {
+    if let Ok(home) = env::var("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("twokey")
+            .join("models");
+    }
+
+    PathBuf::from(".twokey-models")
+}
+
+fn sherpa_model_dir_path() -> PathBuf {
+    sherpa_models_root_path().join(SHERPA_MODEL_DIR_NAME)
+}
+
+struct SherpaModelFiles {
+    model: PathBuf,
+    tokens: PathBuf,
+}
+
+fn sherpa_model_files(model_dir: &Path) -> Option<SherpaModelFiles> {
+    let tokens = model_dir.join("tokens.txt");
+    if !tokens.is_file() {
+        return None;
+    }
+
+    let model_candidates = [
+        model_dir.join("model.int8.onnx"),
+        model_dir.join("model.onnx"),
+    ];
+
+    model_candidates
+        .iter()
+        .find(|path| path.is_file())
+        .map(|model| SherpaModelFiles {
+            model: model.to_path_buf(),
+            tokens,
+        })
+}
+
 fn twokey_managed_bin_path(name: &str) -> PathBuf {
     if let Ok(home) = env::var("HOME") {
         return PathBuf::from(home)
@@ -567,6 +785,76 @@ fn install_whisper_in_venv() -> Result<(), String> {
     let whisper = venv_path.join("bin").join("whisper");
     if !whisper.is_file() {
         return Err("Whisper wurde installiert, aber das CLI-Binary fehlt im venv".to_string());
+    }
+
+    Ok(())
+}
+
+fn install_sherpa_in_venv() -> Result<(), String> {
+    let venv_path = sherpa_venv_path();
+    if let Some(parent) = venv_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("sherpa-onnx Verzeichnis konnte nicht angelegt werden: {error}"))?;
+    }
+
+    if !venv_path.join("bin").join("python").is_file() {
+        let venv = venv_path.to_string_lossy().to_string();
+        run_command("python3", &["-m", "venv", &venv])?;
+    }
+
+    let python = sherpa_venv_python_path().to_string_lossy().to_string();
+    run_command(&python, &["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])?;
+    run_command(&python, &["-m", "pip", "install", "--upgrade", "numpy", "click", "sherpa-onnx"])?;
+    Ok(())
+}
+
+fn ensure_sherpa_model_downloaded() -> Result<(), String> {
+    let model_dir = sherpa_model_dir_path();
+    if sherpa_model_files(&model_dir).is_some() {
+        return Ok(());
+    }
+
+    let models_root = sherpa_models_root_path();
+    fs::create_dir_all(&models_root)
+        .map_err(|error| format!("Modell-Verzeichnis konnte nicht erstellt werden: {error}"))?;
+
+    let archive_name = SHERPA_MODEL_ARCHIVE_URL
+        .rsplit('/')
+        .next()
+        .ok_or_else(|| "Ungueltige sherpa-onnx Modell-URL".to_string())?;
+    let archive_path = models_root.join(archive_name);
+
+    if !archive_path.is_file() {
+        let mut response = reqwest::blocking::get(SHERPA_MODEL_ARCHIVE_URL)
+            .map_err(|error| format!("sherpa-onnx Modell konnte nicht heruntergeladen werden: {error}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "sherpa-onnx Modell konnte nicht heruntergeladen werden (HTTP {})",
+                response.status()
+            ));
+        }
+
+        let mut file = fs::File::create(&archive_path)
+            .map_err(|error| format!("Modell-Archiv konnte nicht gespeichert werden: {error}"))?;
+        std::io::copy(&mut response, &mut file)
+            .map_err(|error| format!("Modell-Archiv konnte nicht geschrieben werden: {error}"))?;
+    }
+
+    let status = Command::new("tar")
+        .arg("-xjf")
+        .arg(&archive_path)
+        .arg("-C")
+        .arg(&models_root)
+        .status()
+        .map_err(|error| format!("tar konnte nicht gestartet werden: {error}"))?;
+
+    if !status.success() {
+        return Err(format!("tar konnte das sherpa-onnx Modell nicht entpacken (Status {status})"));
+    }
+
+    if sherpa_model_files(&model_dir).is_none() {
+        return Err("sherpa-onnx Modell wurde entpackt, aber benoetigte Dateien fehlen (tokens.txt/model.onnx).".to_string());
     }
 
     Ok(())

@@ -117,6 +117,14 @@ export type LocalWhisperDiagnostics = {
   message: string;
 };
 
+export type SherpaOnnxDiagnostics = {
+  runtimeAvailable: boolean;
+  modelAvailable: boolean;
+  managedVenvPath: string;
+  managedModelPath: string;
+  message: string;
+};
+
 export type ToolchainStep = {
   kind: string;
   value: string;
@@ -140,6 +148,7 @@ export type ToolchainDryRun = {
 export type RuntimeDiagnostics = {
   desktop: DesktopCapabilities;
   whisper: LocalWhisperDiagnostics;
+  sherpa: SherpaOnnxDiagnostics;
   tts: {
     backend: string;
     available: boolean;
@@ -502,6 +511,28 @@ export async function ensureLocalWhisperRuntime(sudoPassword?: string | null): P
   return invoke<string>("ensure_local_whisper_runtime", { sudoPassword: sudoPassword ?? null });
 }
 
+export async function getSherpaOnnxDiagnostics(): Promise<SherpaOnnxDiagnostics> {
+  if (!isTauriRuntime()) {
+    return {
+      runtimeAvailable: false,
+      modelAvailable: false,
+      managedVenvPath: "",
+      managedModelPath: "",
+      message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+    };
+  }
+
+  return invoke<SherpaOnnxDiagnostics>("get_sherpa_onnx_diagnostics");
+}
+
+export async function ensureSherpaOnnxRuntime(): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keine sherpa-onnx Runtime installieren.");
+  }
+
+  return invoke<string>("ensure_sherpa_onnx_runtime");
+}
+
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
   if (!isTauriRuntime()) {
     return {
@@ -517,6 +548,13 @@ export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
         ffmpegAvailable: false,
         managedWhisperPath: "",
         managedFfmpegPath: "",
+        message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+      },
+      sherpa: {
+        runtimeAvailable: false,
+        modelAvailable: false,
+        managedVenvPath: "",
+        managedModelPath: "",
         message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
       },
       tts: {

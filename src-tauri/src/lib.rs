@@ -40,6 +40,7 @@ struct UiHotkeyEvent {
 struct RuntimeDiagnostics {
     desktop: hotkeys::DesktopCapabilities,
     whisper: stt::LocalWhisperDiagnostics,
+    sherpa: stt::SherpaOnnxDiagnostics,
     tts: tts::TtsDiagnostics,
     providers: Vec<provider::ProviderInfo>,
     stt_provider: String,
@@ -162,6 +163,10 @@ async fn save_settings(settings: settings::AppSettings) -> Result<(), String> {
             stt::ensure_local_whisper_installed()?;
         }
 
+        if settings.stt_provider == "sherpa-onnx" {
+            stt::ensure_sherpa_onnx_installed()?;
+        }
+
         settings::save(&settings)
     })
     .await
@@ -191,6 +196,16 @@ fn get_local_whisper_diagnostics() -> stt::LocalWhisperDiagnostics {
 #[tauri::command]
 fn ensure_local_whisper_runtime(sudo_password: Option<String>) -> Result<String, String> {
     stt::ensure_local_whisper_runtime(sudo_password.as_deref())
+}
+
+#[tauri::command]
+fn get_sherpa_onnx_diagnostics() -> stt::SherpaOnnxDiagnostics {
+    stt::sherpa_onnx_diagnostics()
+}
+
+#[tauri::command]
+fn ensure_sherpa_onnx_runtime() -> Result<String, String> {
+    stt::ensure_sherpa_onnx_runtime()
 }
 
 #[tauri::command]
@@ -286,6 +301,7 @@ fn get_runtime_diagnostics() -> RuntimeDiagnostics {
     RuntimeDiagnostics {
         desktop: hotkeys::capabilities(),
         whisper: stt::local_whisper_diagnostics(),
+        sherpa: stt::sherpa_onnx_diagnostics(),
         tts: tts::diagnostics(),
         providers: provider::list(),
         stt_provider: app_settings.stt_provider,
@@ -402,6 +418,8 @@ pub fn run() {
             list_openrouter_models,
             get_local_whisper_diagnostics,
             ensure_local_whisper_runtime,
+            get_sherpa_onnx_diagnostics,
+            ensure_sherpa_onnx_runtime,
             export_debug_report,
             get_runtime_diagnostics,
             open_settings_window,
