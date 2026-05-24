@@ -24,6 +24,7 @@ import {
   readSelectedText,
   replaceSelectedText,
   saveSettings,
+  setAutostart,
   type AppSettings,
   type DesktopCapabilities,
   type FileContext,
@@ -476,7 +477,9 @@ function SettingsWindow() {
     const nextSettings = { ...settings, [key]: value };
     setSettings(nextSettings);
     setSaveState("Speichere...");
-    saveSettings(nextSettings)
+    const sideEffect = key === "autostart" ? setAutostart(Boolean(value)) : Promise.resolve();
+    sideEffect
+      .then(() => saveSettings(nextSettings))
       .then(() => setSaveState("Gespeichert"))
       .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
   };

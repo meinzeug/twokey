@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 9: Datei-Kontext.
+Phase 10: Packaging.
 
 ## Completed
 
@@ -49,6 +49,8 @@ Phase 9: Datei-Kontext.
 - PDF text extraction uses `pdftotext`.
 - Image files are registered as vision-ready metadata.
 - Extracted file text is cached under `~/.cache/twokey-ai/file-contexts/`.
+- AppImage and `.deb` bundle generation remains verified.
+- Autostart setting writes/removes `~/.config/autostart/twokey-ai.desktop`.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -79,15 +81,15 @@ Phase 9: Datei-Kontext.
 - Online provider API-key storage and execution are not implemented yet.
 - Office files are not supported yet.
 - Image files are not analyzed until a vision provider is active.
+- Tray icon is still not implemented.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 10: Packaging.
+Phase 11: Auto-Update.
 
-Planned Phase 10 work:
+Planned Phase 11 work:
 
-- Harden AppImage and `.deb` metadata.
-- Add desktop launcher details.
-- Add autostart `.desktop` handling.
-- Document install/uninstall flows.
+- Check GitHub Releases for newer versions.
+- Show update availability in settings.
+- Keep downloads/manual install explicit before adding automatic updates.

@@ -4,6 +4,7 @@ use audio::AudioRecorder;
 use tauri::{AppHandle, Manager};
 
 mod audio;
+mod autostart;
 mod desktop;
 mod file_context;
 mod hotkeys;
@@ -64,6 +65,11 @@ fn save_settings(settings: settings::AppSettings) -> Result<(), String> {
 }
 
 #[tauri::command]
+fn set_autostart(enabled: bool) -> Result<(), String> {
+    autostart::set_enabled(enabled)
+}
+
+#[tauri::command]
 fn list_providers() -> Vec<provider::ProviderInfo> {
     provider::list()
 }
@@ -92,7 +98,8 @@ pub fn run() {
             open_settings_window,
             read_selected_text,
             replace_selected_text,
-            save_settings
+            save_settings,
+            set_autostart
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TwoKey Linux AI Assistant");

@@ -116,6 +116,12 @@ Phase 9 file context behavior:
 - Images are registered as context metadata for future vision providers.
 - Extracted text is cached under `~/.cache/twokey-ai/file-contexts/`.
 
+Phase 10 packaging behavior:
+
+- `npm run tauri:build` creates AppImage and `.deb` bundles.
+- Settings autostart writes `~/.config/autostart/twokey-ai.desktop`.
+- Generated bundles live under `src-tauri/target/release/bundle/`.
+
 Build the frontend:
 
 ```bash

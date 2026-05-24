@@ -162,6 +162,14 @@ export async function saveSettings(settings: AppSettings): Promise<void> {
   await invoke("save_settings", { settings });
 }
 
+export async function setAutostart(enabled: boolean): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("set_autostart", { enabled });
+}
+
 export async function listProviders(): Promise<ProviderInfo[]> {
   if (!isTauriRuntime()) {
     return [];
