@@ -31,7 +31,11 @@ Current in-app behavior:
 - update checks respect configured channel (`stable`, `beta`, `dev`)
 - update install verifies checksum when `.sha256` release asset exists
 - if starting the updated AppImage fails, previous local AppImage is restored
+- staged rollout gating is supported per release body marker:
+	- `twokey-rollout:<0-100>` (example: `twokey-rollout:25`)
+	- for `beta`, default rollout is 30% if marker is missing
+	- for `stable`/`dev`, default rollout is 100%
 
 Not yet implemented:
 
-- staged channels with automatic safe rollout
+- remote cohort management/dashboard beyond release-note marker control

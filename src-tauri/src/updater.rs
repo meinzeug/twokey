@@ -30,6 +30,14 @@ struct GithubRelease {
     assets: Vec<GithubAsset>,
     prerelease: bool,
     draft: bool,
+    body: Option<String>,
+}
+
+struct SelectedRelease {
+    release: GithubRelease,
+    rollout_percentage: u8,
+    cohort_bucket: u8,
+    eligible: bool,
 }
 
 #[derive(Deserialize)]
@@ -41,7 +49,7 @@ struct GithubAsset {
 pub fn check() -> Result<UpdateStatus, String> {
     let current_version = env!("CARGO_PKG_VERSION").to_string();
     let channel = settings::load().unwrap_or_default().update_channel;
-    let release = match fetch_release_for_channel(&channel) {
+    let selected = match fetch_release_for_channel(&channel) {
         Ok(Some(release)) => release,
         Ok(None) => {
             return Ok(UpdateStatus {
@@ -55,16 +63,36 @@ pub fn check() -> Result<UpdateStatus, String> {
         Err(error) => return Err(error),
     };
 
+    let release = &selected.release;
+    if !selected.eligible {
+        return Ok(UpdateStatus {
+            current_version,
+            latest_version: Some(release.tag_name.clone()),
+            update_available: false,
+            release_url: Some(release.html_url.clone()),
+            message: format!(
+                "Release {} ist verfuegbar, aber noch nicht fuer diese Installation freigeschaltet (Rollout {}%, Kohorte {}).",
+                release.tag_name,
+                selected.rollout_percentage,
+                selected.cohort_bucket
+            ),
+        });
+    }
+
     let latest_clean = release.tag_name.trim_start_matches('v').to_string();
     let update_available = latest_clean != current_version;
 
     Ok(UpdateStatus {
         current_version,
-        latest_version: Some(release.tag_name),
+        latest_version: Some(release.tag_name.clone()),
         update_available,
-        release_url: Some(release.html_url),
+        release_url: Some(release.html_url.clone()),
         message: if update_available {
-            format!("Neue Version im Kanal '{channel}' verfuegbar. Download und Start ist moeglich.")
+            format!(
+                "Neue Version im Kanal '{channel}' verfuegbar (Rollout {}%, Kohorte {}). Download und Start ist moeglich.",
+                selected.rollout_percentage,
+                selected.cohort_bucket
+            )
         } else {
             format!("Du nutzt die aktuelle Version fuer Kanal '{channel}'.")
         },
@@ -73,8 +101,17 @@ pub fn check() -> Result<UpdateStatus, String> {
 
 pub fn install_latest_appimage() -> Result<String, String> {
     let channel = settings::load().unwrap_or_default().update_channel;
-    let release = fetch_release_for_channel(&channel)?
+    let selected = fetch_release_for_channel(&channel)?
         .ok_or_else(|| format!("Kein Release fuer Kanal '{channel}' gefunden"))?;
+    if !selected.eligible {
+        return Err(format!(
+            "Dieses Update ist noch nicht fuer diese Installation freigeschaltet (Rollout {}%, Kohorte {}).",
+            selected.rollout_percentage,
+            selected.cohort_bucket
+        ));
+    }
+
+    let release = selected.release;
     let asset = release
         .assets
         .iter()
@@ -184,9 +221,10 @@ pub fn install_latest_appimage() -> Result<String, String> {
     Ok(format!("Update {} (Kanal: {}) heruntergeladen und gestartet.", release.tag_name, channel))
 }
 
-fn fetch_release_for_channel(channel: &str) -> Result<Option<GithubRelease>, String> {
+fn fetch_release_for_channel(channel: &str) -> Result<Option<SelectedRelease>, String> {
     if channel == "stable" {
-        return fetch_latest_release().map(Some);
+        let release = fetch_latest_release()?;
+        return Ok(Some(select_with_rollout(release, channel)));
     }
 
     let response = reqwest::blocking::Client::new()
@@ -215,7 +253,67 @@ fn fetch_release_for_channel(channel: &str) -> Result<Option<GithubRelease>, Str
             .find(|release| !release.draft && !release.prerelease),
     };
 
-    Ok(selected)
+    Ok(selected.map(|release| select_with_rollout(release, channel)))
+}
+
+fn select_with_rollout(release: GithubRelease, channel: &str) -> SelectedRelease {
+    let rollout_percentage = parse_rollout_percentage(release.body.as_deref())
+        .unwrap_or_else(|| default_rollout_percentage(channel));
+    let cohort_bucket = update_cohort_bucket(&release.tag_name, channel);
+    let eligible = cohort_bucket < rollout_percentage;
+
+    SelectedRelease {
+        release,
+        rollout_percentage,
+        cohort_bucket,
+        eligible,
+    }
+}
+
+fn default_rollout_percentage(channel: &str) -> u8 {
+    match channel {
+        "beta" => 30,
+        "dev" => 100,
+        _ => 100,
+    }
+}
+
+fn parse_rollout_percentage(body: Option<&str>) -> Option<u8> {
+    let body = body?;
+    for line in body.lines() {
+        let trimmed = line.trim();
+        if let Some(value) = trimmed.strip_prefix("twokey-rollout:") {
+            let parsed = value.trim().parse::<u8>().ok()?;
+            if parsed <= 100 {
+                return Some(parsed);
+            }
+        }
+    }
+    None
+}
+
+fn update_cohort_bucket(tag_name: &str, channel: &str) -> u8 {
+    let fingerprint = installation_fingerprint();
+    let seed = format!("{fingerprint}:{tag_name}:{channel}");
+    let digest = Sha256::digest(seed.as_bytes());
+    let value = u16::from_be_bytes([digest[0], digest[1]]) % 100;
+    value as u8
+}
+
+fn installation_fingerprint() -> String {
+    for path in ["/etc/machine-id", "/var/lib/dbus/machine-id"] {
+        if let Ok(value) = fs::read_to_string(path) {
+            let trimmed = value.trim();
+            if !trimmed.is_empty() {
+                return trimmed.to_string();
+            }
+        }
+    }
+
+    let user = std::env::var("USER").unwrap_or_else(|_| "unknown-user".to_string());
+    let host = std::env::var("HOSTNAME").unwrap_or_else(|_| "unknown-host".to_string());
+    let home = std::env::var("HOME").unwrap_or_else(|_| ".".to_string());
+    format!("{user}:{host}:{home}")
 }
 
 fn fetch_latest_release() -> Result<GithubRelease, String> {

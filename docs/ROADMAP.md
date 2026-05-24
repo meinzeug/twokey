@@ -57,6 +57,7 @@
 - Signed release artifacts.
 - Safer update install flow with rollback.
 - Optional background update download.
+- Staged rollout by channel/cohort marker in release notes.
 
 ### Quality
 

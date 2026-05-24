@@ -69,16 +69,17 @@ Align runtime behavior with the video UX:
 - Wayland compatibility matrix tracking document added.
 - Updater supports channel-aware release selection and checksum verification.
 - Updater restores previous local AppImage if updated binary start fails.
+- Updater supports staged rollout cohorts via release marker (`twokey-rollout:<percent>`).
 
 ## Remaining Gaps
 
 - Wayland still has hard global hotkey/automation limitations.
-- Auto-update remains AppImage-first and does not yet support staged safe rollout.
+- Auto-update remains AppImage-first.
 - Vision answer quality depends on chosen provider/model capability.
 
 ## Hard Gaps Requiring Larger Milestones
 
-1. Staged rollout strategy across channels and cohorts.
+1. Remote rollout management (dashboard/control plane) beyond release-note marker control.
 2. Compositor-specific Wayland integrations (GNOME/KWin/wlroots/Hyprland).
 3. End-to-end runtime integration tests across session backends.
 4. Visual toolchain/workflow builder.
