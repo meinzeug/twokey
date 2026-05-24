@@ -494,6 +494,11 @@ function withManagedBinPath(baseEnv) {
     parts.unshift(APPIMAGE_DIR);
   }
   env.PATH = parts.join(":");
+  // Remove variables that interfere with Python virtual environments.
+  // An inherited PYTHONHOME or PYTHONPATH causes the venv interpreter to look
+  // for the standard library (including "encodings") in the wrong location.
+  delete env.PYTHONHOME;
+  delete env.PYTHONPATH;
   return env;
 }
 
