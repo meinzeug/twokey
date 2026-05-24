@@ -285,8 +285,10 @@ function OverlayApp() {
                 return;
               }
 
-              setStatus("error");
-              setEventMessage(error instanceof Error ? error.message : String(error));
+              const message = error instanceof Error ? error.message : String(error);
+              setStatus("ready");
+              setEventMessage(`KI-Verarbeitung fehlgeschlagen: ${message}`);
+              setAssistantAnswer("Ich konnte keinen Chat-Provider erfolgreich erreichen. Pruefe Ollama/API-Key in den Einstellungen und versuche es erneut.");
             });
         } else if (modeRef.current === "edit") {
           setStatus("thinking");

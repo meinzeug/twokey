@@ -1,4 +1,5 @@
 use std::path::Path;
+use std::time::Duration;
 
 use base64::Engine;
 use serde::{Deserialize, Serialize};
@@ -62,7 +63,10 @@ pub fn chat_with_model(prompt: &str, model: &str) -> Result<String, String> {
     };
 
     let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
-    let response = reqwest::blocking::Client::new()
+    let response = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(18))
+        .build()
+        .map_err(|error| format!("Ollama-Client konnte nicht erstellt werden: {error}"))?
         .post(url)
         .json(&request)
         .send()
@@ -115,7 +119,10 @@ pub fn chat_with_model_and_image(prompt: &str, model: &str, image_path: &Path) -
     };
 
     let url = format!("{}/api/chat", base_url.trim_end_matches('/'));
-    let response = reqwest::blocking::Client::new()
+    let response = reqwest::blocking::Client::builder()
+        .timeout(Duration::from_secs(22))
+        .build()
+        .map_err(|error| format!("Ollama-Vision-Client konnte nicht erstellt werden: {error}"))?
         .post(url)
         .json(&request)
         .send()

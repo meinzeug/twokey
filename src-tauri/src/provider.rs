@@ -103,27 +103,51 @@ pub fn chat(prompt: &str) -> Result<String, String> {
 
 pub fn chat_with_context(prompt: &str, context: Option<ChatFileContext>) -> Result<String, String> {
     let app_settings = settings::load().unwrap_or_default();
-    let provider_id = choose_provider(&app_settings, context.as_ref());
+    let provider_order = provider_fallback_order(&app_settings, context.as_ref());
+    let mut errors: Vec<String> = Vec::new();
+    let mut selected_provider = "unknown".to_string();
+    let mut result: Result<String, String> = Err("Kein Provider verfuegbar".to_string());
 
-    let result = match provider_id.as_str() {
-        "openai-compatible" => {
-            let provider = OpenAICompatibleProvider;
-            provider.chat(prompt, &app_settings.openai_model, context.as_ref())
+    for provider_id in provider_order {
+        selected_provider = provider_id.clone();
+        let attempt = match provider_id.as_str() {
+            "openai-compatible" => {
+                let provider = OpenAICompatibleProvider;
+                provider.chat(prompt, &app_settings.openai_model, context.as_ref())
+            }
+            "openrouter" => {
+                let provider = OpenRouterProvider;
+                provider.chat(prompt, &app_settings.openrouter_model, context.as_ref())
+            }
+            _ => {
+                let provider = OllamaProvider;
+                provider.chat(prompt, &app_settings.ollama_model, context.as_ref())
+            }
+        };
+
+        match attempt {
+            Ok(answer) => {
+                result = Ok(answer);
+                break;
+            }
+            Err(error) => {
+                errors.push(format!("{provider_id}: {error}"));
+                result = Err(error);
+            }
         }
-        "openrouter" => {
-            let provider = OpenRouterProvider;
-            provider.chat(prompt, &app_settings.openrouter_model, context.as_ref())
-        }
-        _ => {
-            let provider = OllamaProvider;
-            provider.chat(prompt, &app_settings.ollama_model, context.as_ref())
-        }
-    };
+    }
+
+    if result.is_err() && !errors.is_empty() {
+        result = Err(format!(
+            "Alle konfigurierten Chat-Provider fehlgeschlagen: {}",
+            errors.join(" | ")
+        ));
+    }
 
     let _ = history::record(history::AuditEvent {
         kind: "chat".to_string(),
         mode: Some("conversation".to_string()),
-        provider: Some(provider_id),
+        provider: Some(selected_provider),
         input_text: Some(prompt.to_string()),
         output_text: result.clone().ok(),
         metadata_json: None,
@@ -148,6 +172,38 @@ fn choose_provider(app_settings: &settings::AppSettings, context: Option<&ChatFi
     }
 
     "ollama".to_string()
+}
+
+fn provider_fallback_order(app_settings: &settings::AppSettings, context: Option<&ChatFileContext>) -> Vec<String> {
+    let mut ordered: Vec<String> = Vec::new();
+
+    let primary = choose_provider(app_settings, context);
+    ordered.push(primary.clone());
+
+    if primary != "ollama" {
+        ordered.push("ollama".to_string());
+    }
+
+    if secrets::provider_secret_status("openai-compatible").configured {
+        ordered.push("openai-compatible".to_string());
+    }
+    if secrets::provider_secret_status("openrouter").configured {
+        ordered.push("openrouter".to_string());
+    }
+
+    if primary == "ollama" {
+        ordered.retain(|provider| provider != "ollama");
+        ordered.insert(0, "ollama".to_string());
+    }
+
+    let mut deduped: Vec<String> = Vec::new();
+    for provider in ordered {
+        if !deduped.iter().any(|item| item == &provider) {
+            deduped.push(provider);
+        }
+    }
+
+    deduped
 }
 
 pub fn list() -> Vec<ProviderInfo> {

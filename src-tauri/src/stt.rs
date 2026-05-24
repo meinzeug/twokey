@@ -147,6 +147,25 @@ fn transcribe_with_local_whisper(
     }
 
     let ffmpeg_program = find_ffmpeg_program();
+    let clip_duration = estimate_audio_duration_secs(audio_path);
+    let short_clip_fast_path = clip_duration.is_some_and(|duration| duration <= 6.0);
+
+    let effective_model = if short_clip_fast_path {
+        match whisper_model {
+            "large-v3" => "small",
+            "medium" => "base",
+            "small" => "tiny",
+            _ => whisper_model,
+        }
+    } else {
+        whisper_model
+    };
+
+    let effective_beam_size: u8 = if short_clip_fast_path {
+        1
+    } else {
+        whisper_beam_size.clamp(1, 10)
+    };
 
     let mut commands: Vec<Vec<String>> = Vec::new();
     if command_exists("whisper-cli") {
@@ -168,16 +187,22 @@ fn transcribe_with_local_whisper(
             );
         }
 
-        let beam_size = whisper_beam_size.clamp(1, 10).to_string();
+        let beam_size = effective_beam_size.to_string();
         commands.push(vec![
             whisper_program,
             audio_path.to_string_lossy().to_string(),
             "--language".to_string(),
             language.to_string(),
             "--model".to_string(),
-            whisper_model.to_string(),
+            effective_model.to_string(),
             "--beam_size".to_string(),
             beam_size,
+            "--best_of".to_string(),
+            "1".to_string(),
+            "--temperature".to_string(),
+            "0".to_string(),
+            "--fp16".to_string(),
+            "False".to_string(),
         ]);
     }
 
@@ -223,8 +248,9 @@ fn transcribe_with_local_whisper(
             continue;
         }
 
+        let cleaned = sanitize_transcript(&text);
         return Ok(Transcript {
-            text,
+            text: cleaned,
             provider: "local-whisper".to_string(),
         });
     }
@@ -237,6 +263,51 @@ fn transcribe_with_local_whisper(
             attempt_errors.join(" | ")
         ))
     }
+}
+
+fn sanitize_transcript(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+
+    while let Some(ch) = chars.next() {
+        if ch == '[' {
+            let mut marker = String::new();
+            while let Some(next) = chars.next() {
+                marker.push(next);
+                if next == ']' {
+                    break;
+                }
+                if marker.len() > 40 {
+                    break;
+                }
+            }
+
+            let lower = marker.to_ascii_lowercase();
+            if marker.ends_with(']') && lower.contains("-->") {
+                continue;
+            }
+
+            out.push('[');
+            out.push_str(&marker);
+            continue;
+        }
+
+        out.push(ch);
+    }
+
+    out.split_whitespace().collect::<Vec<_>>().join(" ")
+}
+
+fn estimate_audio_duration_secs(audio_path: &Path) -> Option<f32> {
+    let metadata = fs::metadata(audio_path).ok()?;
+    let len = metadata.len();
+    if len <= 44 {
+        return None;
+    }
+
+    // Recorder writes WAV mono 16kHz s16: bytes_per_second = 16000 * 2 = 32000
+    let pcm_bytes = len.saturating_sub(44) as f32;
+    Some(pcm_bytes / 32000.0)
 }
 
 fn find_ffmpeg_program() -> Option<PathBuf> {
