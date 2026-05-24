@@ -28,8 +28,10 @@ Current in-app behavior:
 - notify user if newer version exists
 - download latest AppImage and launch it from settings
 - local runtime dependencies can be prepared explicitly via CLI (`--prepare-runtime`, `--prepare-runtime-only`)
+- update checks respect configured channel (`stable`, `beta`, `dev`)
+- update install verifies checksum when `.sha256` release asset exists
+- if starting the updated AppImage fails, previous local AppImage is restored
 
 Not yet implemented:
 
-- rollback-capable auto-install flow
 - staged channels with automatic safe rollout

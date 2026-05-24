@@ -67,17 +67,18 @@ Align runtime behavior with the video UX:
 - CI workflow validates TS and Rust compile checks on each push/PR.
 - Wayland fallback via manual recording controls in the overlay menu.
 - Wayland compatibility matrix tracking document added.
+- Updater supports channel-aware release selection and checksum verification.
+- Updater restores previous local AppImage if updated binary start fails.
 
 ## Remaining Gaps
 
 - Wayland still has hard global hotkey/automation limitations.
-- Auto-update is AppImage-first and not yet a rollback-capable installer pipeline.
+- Auto-update remains AppImage-first and does not yet support staged safe rollout.
 - Vision answer quality depends on chosen provider/model capability.
-- Edit mode defaults to direct replace but now offers preview-confirm toggle for stricter workflows.
 
 ## Hard Gaps Requiring Larger Milestones
 
-1. Rollback-capable updater flow with staged rollout strategy.
+1. Staged rollout strategy across channels and cohorts.
 2. Compositor-specific Wayland integrations (GNOME/KWin/wlroots/Hyprland).
 3. End-to-end runtime integration tests across session backends.
 4. Visual toolchain/workflow builder.
@@ -90,6 +91,5 @@ Align runtime behavior with the video UX:
 ## Next Priorities
 
 1. Improve runtime diagnostics for hotkey/STT failures directly in UI.
-2. Add explicit mode-level safety toggles (auto-replace vs preview).
-3. Add provider capability guardrails for vision/TTS/STT routing.
+2. Expand provider capability guardrails for full feature matrix (vision/TTS/STT).
 4. Add test matrix and reproducible integration tests for X11 and Wayland.

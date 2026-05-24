@@ -67,7 +67,7 @@ Still not fully equivalent to the video vision:
 
 - Toolchains are implemented, but no visual workflow builder exists yet.
 - Wayland still has compositor-specific limits for global hold hotkeys and full automation.
-- Update install is available for AppImage; release artifacts are now signed, but rollback-capable updater flow is still pending.
+- Update install is AppImage-first with channel-aware checks (`stable`/`beta`/`dev`), checksum validation and local rollback fallback.
 
 ## Install
 
@@ -97,6 +97,12 @@ twokey --desktop
 twokey --prepare-runtime
 twokey --prepare-runtime-only
 ```
+
+Updater behavior:
+
+- Uses update channel from settings (`stable`, `beta`, `dev`).
+- Verifies AppImage checksum when a `.sha256` asset is available.
+- Restores previous local AppImage if updated binary cannot be started.
 
 ## Development
 
