@@ -220,6 +220,8 @@ fn run_command(program: &str, args: &[&str]) -> Result<(), String> {
     let status = Command::new(program)
         .env_remove("PYTHONHOME")
         .env_remove("PYTHONPATH")
+        .env_remove("LD_LIBRARY_PATH")
+        .env_remove("LD_PRELOAD")
         .args(args)
         .status()
         .map_err(|error| format!("TTS-Befehl {program} konnte nicht gestartet werden: {error}"))?;

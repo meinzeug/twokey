@@ -495,10 +495,12 @@ function withManagedBinPath(baseEnv) {
   }
   env.PATH = parts.join(":");
   // Remove variables that interfere with Python virtual environments.
-  // An inherited PYTHONHOME or PYTHONPATH causes the venv interpreter to look
-  // for the standard library (including "encodings") in the wrong location.
+  // AppImage/library-loader state can make system Python import the wrong
+  // standard library or fail to load extension modules such as "_ssl".
   delete env.PYTHONHOME;
   delete env.PYTHONPATH;
+  delete env.LD_LIBRARY_PATH;
+  delete env.LD_PRELOAD;
   return env;
 }
 
