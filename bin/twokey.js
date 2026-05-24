@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
-const VERSION = "1.0.3";
+const VERSION = process.env.npm_package_version || "1.0.5";
 const DEFAULT_MODEL = process.env.TWOKEY_OLLAMA_MODEL || "qwen2.5:3b";
 const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11434";
 const LATEST_RELEASE_API = "https://api.github.com/repos/meinzeug/twokey/releases/latest";
@@ -14,6 +14,7 @@ const APPIMAGE_DIR = path.join(os.homedir(), ".local", "share", "twokey", "bin")
 const APPIMAGE_PATH = path.join(APPIMAGE_DIR, "twokey-ai.AppImage");
 
 const args = process.argv.slice(2);
+const QUIET = args.includes("--quiet");
 
 if (args.includes("--help") || args.includes("-h")) {
   printHelp();
@@ -26,13 +27,27 @@ if (args.includes("--version") || args.includes("-v")) {
 }
 
 if (args.includes("--desktop")) {
-  launchDesktopApp().then((started) => {
-    if (started) {
-      console.log("TwoKey desktop app started in background.");
+  launchDesktopApp().then(async (startedCommand) => {
+    if (startedCommand) {
+      if (args.includes("--enable-autostart")) {
+        try {
+          await ensureUserService(startedCommand);
+        } catch (error) {
+          if (!QUIET) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.warn(`Autostart setup skipped: ${message}`);
+          }
+        }
+      }
+      if (!QUIET) {
+        console.log("TwoKey desktop app started in background.");
+      }
       process.exit(0);
     }
-    console.error("No native desktop binary found in PATH.");
-    console.error("Install the .deb/.AppImage release and ensure 'twokey-ai' is available in PATH.");
+    if (!QUIET) {
+      console.error("No native desktop binary found in PATH.");
+      console.error("Install the .deb/.AppImage release and ensure 'twokey-ai' is available in PATH.");
+    }
     process.exit(1);
   });
 }
@@ -55,15 +70,29 @@ if (onceIndex >= 0) {
     process.exit(1);
   });
 } else {
-  launchDesktopApp().then((started) => {
-    if (started) {
-      console.log("TwoKey desktop app started in background.");
+  launchDesktopApp().then(async (startedCommand) => {
+    if (startedCommand) {
+      if (args.includes("--enable-autostart")) {
+        try {
+          await ensureUserService(startedCommand);
+        } catch (error) {
+          if (!QUIET) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.warn(`Autostart setup skipped: ${message}`);
+          }
+        }
+      }
+      if (!QUIET) {
+        console.log("TwoKey desktop app started in background.");
+      }
       process.exit(0);
     }
 
-    console.error("Could not start desktop app.");
-    console.error("Tried system binaries and auto-download from GitHub Releases.");
-    console.error("Use 'twokey --cli' to run terminal mode.");
+    if (!QUIET) {
+      console.error("Could not start desktop app.");
+      console.error("Tried system binaries and auto-download from GitHub Releases.");
+      console.error("Use 'twokey --cli' to run terminal mode.");
+    }
     process.exit(1);
   });
 }
@@ -170,20 +199,21 @@ async function launchDesktopApp() {
   for (const command of candidates) {
     const started = await spawnDetached(command);
     if (started) {
-      return true;
+      return command;
     }
   }
 
   try {
     const downloaded = await ensureLocalAppImage();
     if (downloaded) {
-      return spawnDetached(APPIMAGE_PATH);
+      const started = await spawnDetached(APPIMAGE_PATH);
+      return started ? APPIMAGE_PATH : null;
     }
   } catch {
-    return false;
+    return null;
   }
 
-  return false;
+  return null;
 }
 
 async function ensureLocalAppImage() {
@@ -270,4 +300,64 @@ function printHelp() {
   console.log("");
   console.log("Without options, twokey starts the native desktop app in background.");
   console.log("If no desktop binary is installed, twokey tries to download an AppImage from latest GitHub release.");
+}
+
+async function ensureUserService(command) {
+  const configHome = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
+  const systemdDir = path.join(configHome, "systemd", "user");
+  const servicePath = path.join(systemdDir, "twokey.service");
+  await fs.promises.mkdir(systemdDir, { recursive: true });
+
+  const content = [
+    "[Unit]",
+    "Description=TwoKey Desktop Assistant",
+    "After=graphical-session.target",
+    "",
+    "[Service]",
+    `ExecStart=/bin/sh -lc ${shellEscape(command)}`,
+    "Restart=on-failure",
+    "RestartSec=3",
+    "",
+    "[Install]",
+    "WantedBy=default.target",
+    "",
+  ].join("\n");
+
+  await fs.promises.writeFile(servicePath, content, "utf8");
+
+  await runSystemctlUser(["daemon-reload"]);
+  await runSystemctlUser(["enable", "--now", "twokey.service"]);
+
+  if (!QUIET) {
+    console.log("TwoKey systemd user service enabled: twokey.service");
+  }
+}
+
+async function runSystemctlUser(argsList) {
+  return new Promise((resolve, reject) => {
+    const child = spawn("systemctl", ["--user", ...argsList], {
+      stdio: QUIET ? "ignore" : "pipe",
+      shell: false,
+    });
+
+    let stderr = "";
+    if (child.stderr) {
+      child.stderr.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+    }
+
+    child.on("error", (error) => reject(error));
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `systemctl --user failed with code ${code}`));
+    });
+  });
+}
+
+function shellEscape(value) {
+  return `'${String(value).replace(/'/g, `'\\''`)}'`;
 }

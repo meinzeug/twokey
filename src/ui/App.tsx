@@ -634,6 +634,13 @@ function SettingsWindow() {
   ];
 
   useEffect(() => {
+    document.body.classList.add("settings-window");
+    return () => {
+      document.body.classList.remove("settings-window");
+    };
+  }, []);
+
+  useEffect(() => {
     getSettings()
       .then(setSettings)
       .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));

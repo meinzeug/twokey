@@ -20,6 +20,10 @@ body {
   background: transparent;
 }
 
+body.settings-window {
+  overflow-y: auto;
+}
+
 button {
   font: inherit;
 }
@@ -397,6 +401,7 @@ p {
   display: flex;
   flex-direction: column;
   padding: 28px;
+  overflow-y: auto;
 }
 
 .settings-title {
@@ -420,9 +425,7 @@ p {
 }
 
 .setting-card {
-  height: 100%;
   min-height: 280px;
-  overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 18px;
