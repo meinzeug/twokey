@@ -11,6 +11,7 @@
 - API keys are stored in the OS keyring.
 - Runtime history is stored locally in SQLite.
 - Settings are stored in user config directory.
+- Runtime dependencies for local STT are installed in user space (`~/.local/share/twokey/`) instead of mutating system package state.
 
 ## Desktop Automation Safety
 
@@ -30,5 +31,6 @@ Potential outbound data paths:
 - OpenAI-compatible STT/chat
 - OpenRouter chat
 - release update check (GitHub API)
+- release asset download (GitHub Releases)
 
 Users must configure provider keys explicitly; no implicit cloud provider activation.

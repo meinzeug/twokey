@@ -12,6 +12,7 @@ Dependencies may be needed:
 
 - xdotool
 - xclip or xsel
+- ffmpeg (auto-provisioned by TwoKey in user space if missing)
 
 ## Wayland
 
@@ -30,3 +31,8 @@ TwoKey behavior on Wayland:
 
 For full current feature set, use X11 session.
 Wayland support requires compositor-specific or portal-based expansion and remains partial.
+
+Local Whisper note:
+
+- TwoKey prepares a managed Whisper runtime in user space (`~/.local/share/twokey/`).
+- This avoids mutating system Python environments on distro-managed installations.

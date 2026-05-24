@@ -43,6 +43,13 @@ The core idea matches the video workflow:
 - Tray icon and settings window.
 - GitHub release check from settings.
 - In-app AppImage update download and launch.
+- Local Whisper auto-setup on first use:
+  - managed `ffmpeg` in `~/.local/share/twokey/bin/`
+  - managed Whisper venv in `~/.local/share/twokey/whisper-venv/`
+- Local Whisper tuning in settings:
+  - model selection (`tiny` .. `large-v3`)
+  - beam size tuning (speed vs quality)
+- Visible install/save status in settings (including install spinner).
 
 ## Current Video Parity
 
@@ -65,7 +72,7 @@ Still not fully equivalent to the video vision:
 ## Install
 
 ```bash
-npm install twokey
+npm install -g twokey
 ```
 
 Run:
@@ -78,6 +85,7 @@ Default behavior:
 
 - starts native desktop app in background
 - if no native binary is installed, tries to download latest AppImage release
+- prepares runtime dependencies in user space (best effort, no system package mutation)
 
 Useful options:
 
@@ -86,6 +94,8 @@ twokey --help
 twokey --cli
 twokey --once "Erklaere X11 vs Wayland kurz"
 twokey --desktop
+twokey --prepare-runtime
+twokey --prepare-runtime-only
 ```
 
 ## Development
@@ -146,6 +156,8 @@ Configured in settings (`sttProvider`):
 
 `external-command` needs `TWOKEY_STT_COMMAND` with `{audio}` placeholder.
 
+For `local-whisper`, TwoKey attempts runtime setup in user space and checks required binaries before transcription.
+
 Example:
 
 ```bash
@@ -171,6 +183,11 @@ Optional runtime tools:
 - PDF extraction: `poppler-utils` (`pdftotext`)
 - TTS backends: `spd-say` or `espeak-ng`/`espeak`
 
+Notes:
+
+- `ffmpeg` is auto-provisioned to `~/.local/share/twokey/bin/ffmpeg` if missing.
+- Local Whisper CLI is auto-provisioned to `~/.local/share/twokey/whisper-venv/bin/whisper` if missing.
+
 ## Data Paths
 
 - Config: `~/.config/twokey-ai/`
@@ -178,6 +195,8 @@ Optional runtime tools:
 - Cache: `~/.cache/twokey-ai/`
 - History DB: `~/.local/share/twokey-ai/history.db`
 - Toolchains: `~/.config/twokey-ai/toolchains.json`
+- Managed runtime bin: `~/.local/share/twokey/bin/`
+- Managed Whisper venv: `~/.local/share/twokey/whisper-venv/`
 
 ## Repo
 

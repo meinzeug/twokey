@@ -47,6 +47,13 @@ Align runtime behavior with the video UX:
   - local-whisper
   - external-command
   - openai-compatible
+- Local runtime dependency bootstrap:
+  - managed `ffmpeg` in `~/.local/share/twokey/bin/`
+  - managed Whisper venv in `~/.local/share/twokey/whisper-venv/`
+- Local Whisper settings:
+  - model selection
+  - beam size tuning
+- Save/install UX in settings shows explicit operation status (including install phase).
 - TTS backend support:
   - spd-say
   - espeak-ng / espeak
@@ -60,6 +67,7 @@ Align runtime behavior with the video UX:
 - Wayland still has hard global hotkey/automation limitations.
 - Auto-update is AppImage-first and not yet a signed rollback-capable installer pipeline.
 - Vision answer quality depends on chosen provider/model capability.
+- Edit mode safety still defaults to direct replace; preview-confirm toggle remains a hardening follow-up.
 
 ## Validation Snapshot
 

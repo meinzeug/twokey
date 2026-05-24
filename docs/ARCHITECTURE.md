@@ -11,6 +11,7 @@
 
 1. Global hotkey event starts/stops recording.
 2. Recorded audio is sent to configured STT provider.
+3. If local Whisper is selected, runtime dependencies are verified/prepared and execution prerequisites are checked.
 3. Transcript event is emitted to UI.
 4. UI dispatches mode-specific action:
    - conversation -> provider chat -> optional TTS
@@ -24,6 +25,7 @@
 - hotkeys: global hotkey polling + event lifecycle
 - audio: recording lifecycle
 - stt: provider-specific transcription
+- npm runtime bootstrap: managed user-space runtime dependencies (`ffmpeg`, Whisper CLI venv)
 - provider: chat routing and vision-capable request paths
 - tts: local speech output backends
 - desktop: read/replace/insert automation
@@ -50,3 +52,5 @@
 - History DB: ~/.local/share/twokey-ai/history.db
 - Cache: ~/.cache/twokey-ai/
 - Secrets: OS keyring
+- Managed runtime bin: ~/.local/share/twokey/bin/
+- Managed Whisper venv: ~/.local/share/twokey/whisper-venv/

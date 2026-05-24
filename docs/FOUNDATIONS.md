@@ -12,6 +12,7 @@ TwoKey should let users operate AI during normal desktop work with minimal frict
 
 - The pill is ambient and lightweight.
 - Status states are always visible (ready/listening/transcribing/thinking/writing/error).
+- Potentially long operations (for example runtime install/setup) are visibly represented in settings status.
 - Mode switching is fast and predictable.
 - Recovery paths are explicit when OS capabilities are missing.
 
@@ -33,6 +34,7 @@ TwoKey should let users operate AI during normal desktop work with minimal frict
 - Prefer local model routing where possible.
 - Use secure key storage for online APIs.
 - Keep local audit trail of STT/chat/TTS/feedback events.
+- Prefer user-space runtime setup over system-wide package mutation.
 
 ## Constraints
 

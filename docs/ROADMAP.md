@@ -27,6 +27,8 @@
 ### Runtime Services
 
 - STT providers wired from settings.
+- Local Whisper runtime bootstrap in user space (managed ffmpeg + managed whisper venv).
+- Local Whisper quality/speed tuning controls (model + beam size).
 - Optional TTS answer playback.
 - Tray menu and settings.
 - SQLite history/audit.
@@ -36,6 +38,7 @@
 
 - Better guardrails and failure UX for provider capability mismatches.
 - Better hotkey diagnostics and live status observability.
+- Signed updater pipeline and rollback-ready install flow design.
 
 ## Planned
 
