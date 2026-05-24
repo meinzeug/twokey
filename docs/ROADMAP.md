@@ -50,7 +50,7 @@
 ### Platform Hardening
 
 - Wayland-specific UX paths and clearer fallbacks.
-- Expanded Linux compositor compatibility matrix.
+- Expanded Linux compositor compatibility matrix (tracking doc added).
 
 ### Update/Release Hardening
 
@@ -62,3 +62,4 @@
 
 - Integration tests for end-to-end voice pipeline.
 - Snapshot/regression tests for settings and overlay interactions.
+- CI validation workflow for TypeScript + Rust checks.

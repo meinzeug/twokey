@@ -15,6 +15,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: write
+      id-token: write
 
     steps:
       - name: Checkout repository
@@ -92,11 +93,34 @@ jobs:
           fi
           APPIMAGE_ASSET="twokey-linux-amd64-${RELEASE_VERSION}.AppImage"
           cp "${APPIMAGE}" "${APPIMAGE_ASSET}"
+          sha256sum "${APPIMAGE_ASSET}" > "${APPIMAGE_ASSET}.sha256"
           echo "APPIMAGE_ASSET=${APPIMAGE_ASSET}" >> "$GITHUB_ENV"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@v3.8.1
+
+      - name: Sign AppImage and checksum (keyless)
+        run: |
+          set -euo pipefail
+          cosign sign-blob --yes \
+            --output-signature "${APPIMAGE_ASSET}.sig" \
+            --output-certificate "${APPIMAGE_ASSET}.pem" \
+            "${APPIMAGE_ASSET}"
+
+          cosign sign-blob --yes \
+            --output-signature "${APPIMAGE_ASSET}.sha256.sig" \
+            --output-certificate "${APPIMAGE_ASSET}.sha256.pem" \
+            "${APPIMAGE_ASSET}.sha256"
 
       - name: Upload AppImage to GitHub release
         uses: softprops/action-gh-release@v2
         with:
           tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
-          files: ${{ env.APPIMAGE_ASSET }}
+          files: |
+            ${{ env.APPIMAGE_ASSET }}
+            ${{ env.APPIMAGE_ASSET }}.sha256
+            ${{ env.APPIMAGE_ASSET }}.sig
+            ${{ env.APPIMAGE_ASSET }}.pem
+            ${{ env.APPIMAGE_ASSET }}.sha256.sig
+            ${{ env.APPIMAGE_ASSET }}.sha256.pem
           fail_on_unmatched_files: true

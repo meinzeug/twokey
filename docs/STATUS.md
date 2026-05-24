@@ -54,20 +54,33 @@ Align runtime behavior with the video UX:
   - model selection
   - beam size tuning
 - Save/install UX in settings shows explicit operation status (including install phase).
+- Edit mode safety toggle available (`direkt ersetzen` vs preview/confirm).
+- Provider guardrail for image-context + non-vision provider mismatch.
+- Local Whisper runtime diagnostics endpoint wired into settings.
 - TTS backend support:
   - spd-say
   - espeak-ng / espeak
 - Tray icon/menu support.
 - GitHub release update check in settings.
 - AppImage update download-and-start from settings.
+- Release pipeline publishes checksum + keyless signatures for AppImage assets.
+- CI workflow validates TS and Rust compile checks on each push/PR.
 - Wayland fallback via manual recording controls in the overlay menu.
+- Wayland compatibility matrix tracking document added.
 
 ## Remaining Gaps
 
 - Wayland still has hard global hotkey/automation limitations.
-- Auto-update is AppImage-first and not yet a signed rollback-capable installer pipeline.
+- Auto-update is AppImage-first and not yet a rollback-capable installer pipeline.
 - Vision answer quality depends on chosen provider/model capability.
-- Edit mode safety still defaults to direct replace; preview-confirm toggle remains a hardening follow-up.
+- Edit mode defaults to direct replace but now offers preview-confirm toggle for stricter workflows.
+
+## Hard Gaps Requiring Larger Milestones
+
+1. Rollback-capable updater flow with staged rollout strategy.
+2. Compositor-specific Wayland integrations (GNOME/KWin/wlroots/Hyprland).
+3. End-to-end runtime integration tests across session backends.
+4. Visual toolchain/workflow builder.
 
 ## Validation Snapshot
 

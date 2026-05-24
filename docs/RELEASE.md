@@ -18,6 +18,7 @@ npm run tauri:build
 - GitHub Releases used for release metadata and downloadable assets.
 - npm package includes CLI entrypoint for desktop launch and fallback AppImage download.
 - npm global install bootstraps known runtime dependencies in user space (managed `ffmpeg` + managed Whisper CLI venv).
+- AppImage release pipeline publishes signed artifacts (`.sig`/`.pem`) and checksum files.
 
 ## Updates
 
@@ -30,5 +31,5 @@ Current in-app behavior:
 
 Not yet implemented:
 
-- signed auto-install with rollback
+- rollback-capable auto-install flow
 - staged channels with automatic safe rollout

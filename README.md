@@ -67,7 +67,7 @@ Still not fully equivalent to the video vision:
 
 - Toolchains are implemented, but no visual workflow builder exists yet.
 - Wayland still has compositor-specific limits for global hold hotkeys and full automation.
-- Update install is available for AppImage, but no signed rollback-capable updater pipeline yet.
+- Update install is available for AppImage; release artifacts are now signed, but rollback-capable updater flow is still pending.
 
 ## Install
 
@@ -201,6 +201,10 @@ Notes:
 ## Repo
 
 https://github.com/meinzeug/twokey
+
+## Additional Docs
+
+- Wayland matrix: `docs/WAYLAND_COMPATIBILITY_MATRIX.md`
 
 ## License
 
