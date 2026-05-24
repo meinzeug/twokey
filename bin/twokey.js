@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
-const VERSION = process.env.npm_package_version || "1.0.6";
+const VERSION = process.env.npm_package_version || "1.0.7";
 const DEFAULT_MODEL = process.env.TWOKEY_OLLAMA_MODEL || "qwen2.5:3b";
 const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11434";
 const LATEST_RELEASE_API = "https://api.github.com/repos/meinzeug/twokey/releases/latest";
