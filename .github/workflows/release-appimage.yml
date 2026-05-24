@@ -1,0 +1,69 @@
+name: Build And Upload AppImage
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag to upload the AppImage to (for manual reruns)
+        required: true
+        type: string
+
+jobs:
+  appimage:
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            build-essential \
+            curl \
+            wget \
+            file \
+            libssl-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev \
+            patchelf \
+            libsoup-3.0-dev \
+            libwebkit2gtk-4.1-dev
+
+      - name: Setup Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build AppImage bundle
+        run: npm run tauri:build -- --bundles appimage
+
+      - name: Prepare release asset
+        run: |
+          set -euo pipefail
+          APPIMAGE=$(find src-tauri/target/release/bundle/appimage -type f -name '*.AppImage' | head -n 1)
+          if [[ -z "${APPIMAGE}" ]]; then
+            echo "AppImage build artifact not found"
+            exit 1
+          fi
+          cp "${APPIMAGE}" twokey-linux-amd64.AppImage
+
+      - name: Upload AppImage to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.release.tag_name || github.event.inputs.tag }}
+          files: twokey-linux-amd64.AppImage
+          fail_on_unmatched_files: true

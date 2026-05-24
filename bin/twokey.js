@@ -12,6 +12,7 @@ const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11
 const LATEST_RELEASE_API = "https://api.github.com/repos/meinzeug/twokey/releases/latest";
 const APPIMAGE_DIR = path.join(os.homedir(), ".local", "share", "twokey", "bin");
 const APPIMAGE_PATH = path.join(APPIMAGE_DIR, "twokey-ai.AppImage");
+const APPIMAGE_META_PATH = path.join(APPIMAGE_DIR, "twokey-ai.meta.json");
 
 const args = process.argv.slice(2);
 const QUIET = args.includes("--quiet");
@@ -190,11 +191,21 @@ async function askOllama(prompt) {
 }
 
 async function launchDesktopApp() {
+  let appImageReady = false;
+  try {
+    appImageReady = await ensureLocalAppImage();
+  } catch {
+    appImageReady = false;
+  }
+
   const candidates = [];
   if (process.env.TWOKEY_DESKTOP_CMD) {
     candidates.push(process.env.TWOKEY_DESKTOP_CMD);
   }
-  candidates.push("twokey-ai", "twokey-desktop", APPIMAGE_PATH);
+  if (appImageReady) {
+    candidates.push(APPIMAGE_PATH);
+  }
+  candidates.push("twokey-ai", "twokey-desktop");
 
   for (const command of candidates) {
     const started = await spawnDetached(command);
@@ -203,34 +214,22 @@ async function launchDesktopApp() {
     }
   }
 
-  try {
-    const downloaded = await ensureLocalAppImage();
-    if (downloaded) {
-      const started = await spawnDetached(APPIMAGE_PATH);
-      return started ? APPIMAGE_PATH : null;
-    }
-  } catch {
-    return null;
-  }
-
   return null;
 }
 
 async function ensureLocalAppImage() {
-  try {
-    await fs.promises.access(APPIMAGE_PATH, fs.constants.X_OK);
-    return true;
-  } catch {
-    // Not installed yet.
-  }
-
   await fs.promises.mkdir(APPIMAGE_DIR, { recursive: true });
-  const assetUrl = await resolveLatestAppImageUrl();
-  if (!assetUrl) {
-    return false;
+
+  const latestAsset = await resolveLatestAppImageAsset();
+  if (!latestAsset) {
+    return hasExecutable(APPIMAGE_PATH);
   }
 
-  const response = await fetch(assetUrl, {
+  if (await isCurrentAppImage(latestAsset)) {
+    return true;
+  }
+
+  const response = await fetch(latestAsset.url, {
     headers: {
       "User-Agent": "twokey-cli",
       Accept: "application/octet-stream",
@@ -245,10 +244,19 @@ async function ensureLocalAppImage() {
   await fs.promises.writeFile(APPIMAGE_PATH, data, { mode: 0o755 });
 
   await fs.promises.chmod(APPIMAGE_PATH, 0o755);
+  const meta = {
+    releaseTag: latestAsset.releaseTag,
+    assetName: latestAsset.name,
+    assetId: latestAsset.id,
+    assetSize: latestAsset.size,
+    assetUpdatedAt: latestAsset.updatedAt,
+    downloadedAt: new Date().toISOString(),
+  };
+  await fs.promises.writeFile(APPIMAGE_META_PATH, `${JSON.stringify(meta, null, 2)}\n`, "utf8");
   return true;
 }
 
-async function resolveLatestAppImageUrl() {
+async function resolveLatestAppImageAsset() {
   const response = await fetch(LATEST_RELEASE_API, {
     headers: {
       "User-Agent": "twokey-cli",
@@ -266,7 +274,54 @@ async function resolveLatestAppImageUrl() {
     (asset) => typeof asset?.name === "string" && asset.name.endsWith(".AppImage") && asset.name.includes("amd64"),
   ) || assets.find((asset) => typeof asset?.name === "string" && asset.name.endsWith(".AppImage"));
 
-  return appImage?.browser_download_url ?? null;
+  if (!appImage?.browser_download_url) {
+    return null;
+  }
+
+  return {
+    releaseTag: typeof payload?.tag_name === "string" ? payload.tag_name : "unknown",
+    id: Number.isFinite(appImage.id) ? appImage.id : 0,
+    name: appImage.name,
+    size: Number.isFinite(appImage.size) ? appImage.size : 0,
+    updatedAt: typeof appImage.updated_at === "string" ? appImage.updated_at : "",
+    url: appImage.browser_download_url,
+  };
+}
+
+async function isCurrentAppImage(latestAsset) {
+  if (!(await hasExecutable(APPIMAGE_PATH))) {
+    return false;
+  }
+
+  const [meta, stats] = await Promise.all([readAppImageMeta(), fs.promises.stat(APPIMAGE_PATH)]);
+  if (!meta) {
+    return false;
+  }
+
+  return (
+    meta.releaseTag === latestAsset.releaseTag
+    && meta.assetId === latestAsset.id
+    && meta.assetUpdatedAt === latestAsset.updatedAt
+    && Number(meta.assetSize) === Number(stats.size)
+  );
+}
+
+async function readAppImageMeta() {
+  try {
+    const content = await fs.promises.readFile(APPIMAGE_META_PATH, "utf8");
+    return JSON.parse(content);
+  } catch {
+    return null;
+  }
+}
+
+async function hasExecutable(filePath) {
+  try {
+    await fs.promises.access(filePath, fs.constants.X_OK);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 function spawnDetached(command) {
