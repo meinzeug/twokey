@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 11: Auto-Update.
+Phase 12: Stabilisierung.
 
 ## Completed
 
@@ -53,6 +53,10 @@ Phase 11: Auto-Update.
 - Autostart setting writes/removes `~/.config/autostart/twokey-ai.desktop`.
 - Settings can check GitHub Releases for a newer version.
 - Update checks do not auto-download or auto-install.
+- Final `npm run tauri:build` succeeded and produced AppImage plus `.deb`.
+- `npm audit --omit=dev` reports 0 vulnerabilities.
+- Ollama service is active with `qwen2.5:3b` installed.
+- Repository is pushed to `origin/main`.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -85,15 +89,20 @@ Phase 11: Auto-Update.
 - Image files are not analyzed until a vision provider is active.
 - Tray icon is still not implemented.
 - Release signing and rollback strategy are not defined, so automatic updates are intentionally not implemented.
+- TTS is not implemented yet.
+- Tray menu is not implemented yet.
+- Online provider execution is represented but disabled until secure API-key storage is added.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 12: Stabilisierung.
+Post-Phase Hardening.
 
-Planned Phase 12 work:
+Recommended next work:
 
-- Clean up warnings and UX copy.
-- Run full build and smoke tests.
-- Update docs with final current-state summary.
-- Leave clear known limitations for Wayland, STT, TTS, tray, and online providers.
+- Add tray icon/menu.
+- Add SQLite history/audit tables.
+- Add real local Whisper integration.
+- Add Piper TTS.
+- Add secure API-key storage for online providers.
+- Add Wayland-specific UX paths and portal investigation.

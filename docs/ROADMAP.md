@@ -78,3 +78,8 @@
 - Error reporting.
 - Accessibility and UX polish.
 - Packaging hardening.
+
+## Current Completion Note
+
+Phases 1 through 12 have initial implementations or explicit safe placeholders.
+The app is not production-complete; remaining hardening is tracked in `docs/STATUS.md`.

@@ -79,11 +79,15 @@ Implemented:
 - Ollama chat provider through local HTTP API
 - Conversation mode routing from transcript to Ollama
 - Provider router with metadata for local, online, STT, TTS, and vision capabilities
+- File-context loader for text, Markdown-like files, PDF extraction, and image metadata
+- Manual GitHub Release update check
+- XDG settings persistence and autostart integration
 
 Not implemented:
 
 - TTS
 - OpenAI/OpenRouter executable providers
 - SQLite storage
-- Clipboard and text replacement
-- File context extraction
+- TTS
+- Tray menu
+- Secure online provider API-key execution

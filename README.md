@@ -127,6 +127,13 @@ Phase 11 update behavior:
 - Settings can check GitHub Releases for a newer version.
 - The app only reports availability; it does not auto-download or auto-install.
 
+Current stabilization status:
+
+- AppImage and `.deb` builds complete successfully.
+- Ollama runs locally as a systemd service with `qwen2.5:3b`.
+- Production dependency audit reports no vulnerabilities.
+- Wayland limitations, TTS, tray menu, SQLite history, and online provider execution remain future hardening work.
+
 Build the frontend:
 
 ```bash
