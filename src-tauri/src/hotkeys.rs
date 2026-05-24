@@ -40,6 +40,10 @@ struct HotkeyEvent {
 enum HotkeyTrigger {
     Key(u32),
     MouseButton(u32),
+    AnyCtrl,
+    AnyAlt,
+    AnyShift,
+    AnyMeta,
 }
 
 #[derive(Clone, Debug, PartialEq)]
@@ -398,16 +402,16 @@ fn parse_hotkey_spec(raw: &str, keymap: &X11Keymap) -> Option<HotkeySpec> {
     if trigger.is_none() {
         if let Some(last) = parts.last() {
             if last.eq_ignore_ascii_case("meta") || last.eq_ignore_ascii_case("super") || last.eq_ignore_ascii_case("win") {
-                trigger = Some(HotkeyTrigger::Key(keymap.meta_left));
+                trigger = Some(HotkeyTrigger::AnyMeta);
                 meta = false;
             } else if last.eq_ignore_ascii_case("ctrl") || last.eq_ignore_ascii_case("control") {
-                trigger = Some(HotkeyTrigger::Key(keymap.ctrl_left));
+                trigger = Some(HotkeyTrigger::AnyCtrl);
                 ctrl = false;
             } else if last.eq_ignore_ascii_case("alt") {
-                trigger = Some(HotkeyTrigger::Key(keymap.alt_left));
+                trigger = Some(HotkeyTrigger::AnyAlt);
                 alt = false;
             } else if last.eq_ignore_ascii_case("shift") {
-                trigger = Some(HotkeyTrigger::Key(keymap.shift_left));
+                trigger = Some(HotkeyTrigger::AnyShift);
                 shift = false;
             }
         }
@@ -507,6 +511,10 @@ impl X11Keymap {
         match spec.trigger {
             HotkeyTrigger::Key(keycode) => key_is_down(&state.keys, keycode),
             HotkeyTrigger::MouseButton(button) => mouse_button_is_down(state.pointer_mask, button),
+            HotkeyTrigger::AnyCtrl => key_is_down(&state.keys, self.ctrl_left) || key_is_down(&state.keys, self.ctrl_right),
+            HotkeyTrigger::AnyAlt => key_is_down(&state.keys, self.alt_left) || key_is_down(&state.keys, self.alt_right),
+            HotkeyTrigger::AnyShift => key_is_down(&state.keys, self.shift_left) || key_is_down(&state.keys, self.shift_right),
+            HotkeyTrigger::AnyMeta => key_is_down(&state.keys, self.meta_left) || key_is_down(&state.keys, self.meta_right),
         }
     }
 

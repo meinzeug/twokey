@@ -2,6 +2,8 @@ use std::{
     fs,
     path::PathBuf,
     process::{Child, Command, Stdio},
+    thread,
+    time::Duration,
     time::{SystemTime, UNIX_EPOCH},
 };
 
@@ -46,8 +48,29 @@ impl AudioRecorder {
             return Ok(None);
         };
 
-        let _ = active.child.kill();
-        let _ = active.child.wait();
+        let pid = active.child.id().to_string();
+        let _ = Command::new("kill").arg("-INT").arg(&pid).status();
+
+        let mut exited = false;
+        for _ in 0..25 {
+            if active.child.try_wait().map_err(|error| format!("Recorder-Status konnte nicht gelesen werden: {error}"))?.is_some() {
+                exited = true;
+                break;
+            }
+            thread::sleep(Duration::from_millis(20));
+        }
+
+        if !exited {
+            let _ = active.child.kill();
+            let _ = active.child.wait();
+        }
+
+        let metadata = fs::metadata(&active.path)
+            .map_err(|error| format!("Aufnahmedatei konnte nicht gelesen werden: {error}"))?;
+        if metadata.len() < 2048 {
+            let _ = fs::remove_file(&active.path);
+            return Err("Keine nutzbare Audioaufnahme erkannt. Prüfe Mikrofonquelle und Berechtigungen.".to_string());
+        }
 
         Ok(Some(active.path))
     }
