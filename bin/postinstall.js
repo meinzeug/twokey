@@ -23,10 +23,8 @@ if (isRoot && sudoUser && sudoUser !== "root") {
   if (homeDir) {
     env.HOME = homeDir;
   }
-  if (uid && !env.XDG_RUNTIME_DIR) {
+  if (uid) {
     env.XDG_RUNTIME_DIR = `/run/user/${uid}`;
-  }
-  if (env.XDG_RUNTIME_DIR && !env.DBUS_SESSION_BUS_ADDRESS) {
     env.DBUS_SESSION_BUS_ADDRESS = `unix:path=${env.XDG_RUNTIME_DIR}/bus`;
   }
 
@@ -42,16 +40,15 @@ if (isRoot && sudoUser && sudoUser !== "root") {
 
   delegated.on("error", () => process.exit(0));
   delegated.on("close", () => process.exit(0));
-  process.exit(0);
+} else {
+  const child = spawn(process.execPath, [cliPath, "--desktop", "--enable-autostart", "--quiet"], {
+    stdio: "ignore",
+    shell: false,
+  });
+
+  child.on("error", () => process.exit(0));
+  child.on("close", () => process.exit(0));
 }
-
-const child = spawn(process.execPath, [cliPath, "--desktop", "--enable-autostart", "--quiet"], {
-  stdio: "ignore",
-  shell: false,
-});
-
-child.on("error", () => process.exit(0));
-child.on("close", () => process.exit(0));
 
 function resolveUid(username) {
   const out = spawnSync("id", ["-u", username], { encoding: "utf8" });
