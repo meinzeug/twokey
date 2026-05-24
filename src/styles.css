@@ -250,7 +250,8 @@ p {
 }
 
 .transcript-box,
-.answer-box {
+.answer-box,
+.replacement-box {
   margin-top: 10px;
   border: 1px solid rgba(117, 224, 195, 0.22);
   border-radius: 8px;
@@ -263,8 +264,14 @@ p {
   background: rgba(108, 125, 255, 0.08);
 }
 
+.replacement-box {
+  border-color: rgba(255, 194, 102, 0.3);
+  background: rgba(255, 194, 102, 0.08);
+}
+
 .transcript-box strong,
-.answer-box strong {
+.answer-box strong,
+.replacement-box strong {
   display: block;
   margin-bottom: 6px;
   color: #75e0c3;
@@ -275,12 +282,41 @@ p {
   color: #aeb8ff;
 }
 
+.replacement-box strong {
+  color: #ffdfaa;
+}
+
+.replacement-box small {
+  display: block;
+  margin-bottom: 8px;
+  color: #b8a17d;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
 .transcript-box p,
-.answer-box p {
+.answer-box p,
+.replacement-box p {
   margin: 0;
   color: #e8eef7;
   font-size: 13px;
   line-height: 1.45;
+}
+
+.replacement-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.replacement-actions button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 8px;
+  padding: 0 10px;
+  color: #f5f7fb;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
 }
 
 .settings-shell {

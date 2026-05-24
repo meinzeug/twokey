@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 5: Diktiermodus.
+Phase 6: Text markieren, lesen, ersetzen.
 
 ## Completed
 
@@ -36,6 +36,9 @@ Phase 5: Diktiermodus.
 - Conversation mode routes transcripts to Ollama and displays the answer.
 - Dictation mode inserts transcripts at the active cursor on X11.
 - Clipboard content is preserved and restored when `xclip` or `xsel` can read it.
+- Text edit mode reads selected text under X11.
+- Text edit mode asks Ollama for a replacement using the spoken instruction.
+- Text replacement requires explicit confirmation in the overlay.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -66,11 +69,10 @@ Phase 5: Diktiermodus.
 
 ## Next Step
 
-Phase 6: Text markieren, lesen, ersetzen.
+Phase 7: Settings UI.
 
-Planned Phase 6 work:
+Planned Phase 7 work:
 
-- Read currently selected text under X11.
-- Preview AI-edited replacement.
-- Replace selected text after confirmation.
-- Preserve clipboard contents throughout.
+- Persist basic settings under XDG config.
+- Replace placeholder settings with real controls for theme, overlay, hotkey, STT and Ollama model.
+- Keep privacy defaults visible.

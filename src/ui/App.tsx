@@ -18,11 +18,19 @@ import {
   insertText,
   listenForHotkeyEvents,
   openSettingsWindow,
+  readSelectedText,
+  replaceSelectedText,
   type DesktopCapabilities,
 } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
 type AssistantStatus = "ready" | "listening" | "transcribing" | "thinking" | "writing" | "error";
+
+type PendingReplacement = {
+  original: string;
+  replacement: string;
+  instruction: string;
+};
 
 const modes: Record<
   AssistantMode,
@@ -93,6 +101,7 @@ function OverlayApp() {
   const [lastTranscript, setLastTranscript] = useState<string | null>(null);
   const [lastProvider, setLastProvider] = useState<string | null>(null);
   const [assistantAnswer, setAssistantAnswer] = useState<string | null>(null);
+  const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
   const modeRef = useRef(mode);
   const activeMode = modes[mode];
   const ActiveIcon = activeMode.icon;
@@ -169,6 +178,44 @@ function OverlayApp() {
               setStatus("ready");
               setEventMessage("Ollama-Antwort bereit.");
               setAssistantAnswer(answer);
+            })
+            .catch((error: unknown) => {
+              if (!mounted) {
+                return;
+              }
+
+              setStatus("error");
+              setEventMessage(error instanceof Error ? error.message : String(error));
+            });
+        } else if (modeRef.current === "edit") {
+          setStatus("thinking");
+          setEventMessage("Lese Auswahl und bereite Textvorschau vor...");
+          setPendingReplacement(null);
+
+          readSelectedText()
+            .then((selectedText) =>
+              askOllama(
+                [
+                  "Bearbeite den folgenden markierten Text gemaess Anweisung.",
+                  "Gib ausschliesslich den finalen Ersatztext aus, ohne Erklaerung.",
+                  `Anweisung: ${event.transcript}`,
+                  "Markierter Text:",
+                  selectedText,
+                ].join("\n\n"),
+              ).then((replacement) => ({ selectedText, replacement })),
+            )
+            .then(({ selectedText, replacement }) => {
+              if (!mounted) {
+                return;
+              }
+
+              setStatus("ready");
+              setEventMessage("Textvorschau bereit. Bitte bestaetigen.");
+              setPendingReplacement({
+                original: selectedText,
+                replacement,
+                instruction: event.transcript ?? "",
+              });
             })
             .catch((error: unknown) => {
               if (!mounted) {
@@ -324,6 +371,37 @@ function OverlayApp() {
               <p>{assistantAnswer}</p>
             </div>
           ) : null}
+          {pendingReplacement ? (
+            <div className="replacement-box">
+              <strong>Text ersetzen?</strong>
+              <small>{pendingReplacement.instruction}</small>
+              <p>{pendingReplacement.replacement}</p>
+              <div className="replacement-actions">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setStatus("writing");
+                    setEventMessage("Ersetze markierten Text...");
+                    replaceSelectedText(pendingReplacement.replacement)
+                      .then(() => {
+                        setStatus("ready");
+                        setEventMessage("Markierter Text ersetzt.");
+                        setPendingReplacement(null);
+                      })
+                      .catch((error: unknown) => {
+                        setStatus("error");
+                        setEventMessage(error instanceof Error ? error.message : String(error));
+                      });
+                  }}
+                >
+                  Ersetzen
+                </button>
+                <button type="button" onClick={() => setPendingReplacement(null)}>
+                  Verwerfen
+                </button>
+              </div>
+            </div>
+          ) : null}
           {lastAudioPath ? <p className="path-text">{lastAudioPath}</p> : null}
           <p className="preview-text">{statusPreview}</p>
         </section>
@@ -374,6 +452,7 @@ function SettingsWindow() {
           <SettingCard title="Overlay" value="Pille, dunkles Theme, Modusmenü" />
           <SettingCard title="Hotkeys" value="Ctrl+Space ist der erste X11-Hold-Hotkey. Wayland wird explizit begrenzt gemeldet." />
           <SettingCard title="Diktat" value="Diktiermodus fuegt Transkripte unter X11 per Clipboard und xdotool ein." />
+          <SettingCard title="Text bearbeiten" value="Markierten Text lesen, mit Ollama umformulieren und erst nach Vorschau ersetzen." />
           <SettingCard title="Provider" value="Ollama laeuft lokal mit qwen2.5:3b. OpenAI-kompatible APIs folgen spaeter." />
           <SettingCard title="Datenschutz" value="XDG-Pfade, lokale Defaults und externe Warnungen geplant" />
         </div>

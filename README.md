@@ -89,6 +89,13 @@ Phase 5 dictation behavior:
 - Clipboard content is read before insertion and restored afterward when possible.
 - Wayland insertion is deliberately reported as unsupported for now.
 
+Phase 6 text editing behavior:
+
+- In edit mode, TwoKey reads the current X11 selection with `Ctrl+C`.
+- The spoken instruction and selected text are sent to Ollama.
+- The overlay shows a replacement preview.
+- The selected text is replaced only after pressing `Ersetzen`.
+
 Build the frontend:
 
 ```bash

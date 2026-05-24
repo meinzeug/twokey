@@ -6,15 +6,7 @@ use std::{
 };
 
 pub fn insert_text(text: &str) -> Result<(), String> {
-    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string());
-    if session_type != "x11" {
-        return Err("Texteinfügung ist aktuell nur unter X11 implementiert. Wayland folgt mit expliziten Portalen/Fallbacks.".to_string());
-    }
-
-    if !command_exists("xdotool") {
-        return Err("xdotool ist fuer X11-Texteinfügung nicht installiert".to_string());
-    }
-
+    ensure_x11_automation("Texteinfuegung")?;
     let clipboard = ClipboardTool::detect()?;
     let previous_clipboard = clipboard.read().ok();
 
@@ -41,6 +33,58 @@ pub fn insert_text(text: &str) -> Result<(), String> {
     }
 
     paste_result
+}
+
+pub fn read_selected_text() -> Result<String, String> {
+    ensure_x11_automation("Textauswahl lesen")?;
+    let clipboard = ClipboardTool::detect()?;
+    let previous_clipboard = clipboard.read().ok();
+
+    let copy_result = Command::new("xdotool")
+        .arg("key")
+        .arg("ctrl+c")
+        .status()
+        .map_err(|error| format!("xdotool konnte nicht gestartet werden: {error}"))
+        .and_then(|status| {
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("xdotool beendete sich mit Status {status}"))
+            }
+        });
+
+    thread::sleep(Duration::from_millis(140));
+    let selected_text = copy_result.and_then(|_| clipboard.read());
+
+    if let Some(previous) = previous_clipboard {
+        let _ = clipboard.write(&previous);
+    }
+
+    let selected_text = selected_text?.trim().to_string();
+    if selected_text.is_empty() {
+        return Err("Keine markierte Textauswahl gefunden".to_string());
+    }
+
+    Ok(selected_text)
+}
+
+pub fn replace_selected_text(text: &str) -> Result<(), String> {
+    insert_text(text)
+}
+
+fn ensure_x11_automation(action: &str) -> Result<(), String> {
+    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string());
+    if session_type != "x11" {
+        return Err(format!(
+            "{action} ist aktuell nur unter X11 implementiert. Wayland folgt mit expliziten Portalen/Fallbacks."
+        ));
+    }
+
+    if !command_exists("xdotool") {
+        return Err("xdotool ist fuer X11-Desktop-Automation nicht installiert".to_string());
+    }
+
+    Ok(())
 }
 
 enum ClipboardTool {

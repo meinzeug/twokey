@@ -67,6 +67,22 @@ export async function insertText(text: string): Promise<void> {
   await invoke("insert_text", { text });
 }
 
+export async function readSelectedText(): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keine Desktop-Textauswahl lesen.");
+  }
+
+  return invoke<string>("read_selected_text");
+}
+
+export async function replaceSelectedText(text: string): Promise<void> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keine Desktop-Textauswahl ersetzen.");
+  }
+
+  await invoke("replace_selected_text", { text });
+}
+
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {
   if (!isTauriRuntime()) {
     return undefined;

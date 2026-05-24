@@ -40,6 +40,16 @@ fn insert_text(text: String) -> Result<(), String> {
     desktop::insert_text(&text)
 }
 
+#[tauri::command]
+fn read_selected_text() -> Result<String, String> {
+    desktop::read_selected_text()
+}
+
+#[tauri::command]
+fn replace_selected_text(text: String) -> Result<(), String> {
+    desktop::replace_selected_text(&text)
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
@@ -52,7 +62,9 @@ pub fn run() {
             get_desktop_capabilities,
             get_desktop_session_type,
             insert_text,
-            open_settings_window
+            open_settings_window,
+            read_selected_text,
+            replace_selected_text
         ])
         .run(tauri::generate_context!())
         .expect("failed to run TwoKey Linux AI Assistant");
