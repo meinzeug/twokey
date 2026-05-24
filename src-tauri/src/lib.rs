@@ -15,6 +15,7 @@ mod hotkeys;
 mod ollama;
 mod provider;
 mod secrets;
+mod session;
 mod settings;
 mod stt;
 mod toolchains;

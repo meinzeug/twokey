@@ -51,6 +51,7 @@
 
 - Wayland-specific UX paths and clearer fallbacks.
 - Expanded Linux compositor compatibility matrix (tracking doc added).
+- Compositor-aware runtime detection and backend messaging for GNOME/KDE/Sway/Hyprland.
 
 ### Update/Release Hardening
 
@@ -64,3 +65,4 @@
 - Integration tests for end-to-end voice pipeline.
 - Snapshot/regression tests for settings and overlay interactions.
 - CI validation workflow for TypeScript + Rust checks.
+- Reproducible runtime smoke tests for X11 and Wayland in CI session matrix.

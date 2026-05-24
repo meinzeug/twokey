@@ -12,6 +12,10 @@ The core idea matches the video workflow:
 ## What Works Now
 
 - Global hold hotkey on X11 for voice capture.
+- Wayland compositor detection (GNOME/KDE/Sway/Hyprland) with compositor-specific runtime capability messaging.
+- Wayland automation integration paths:
+  - text insertion via `wtype` or `ydotool`
+  - selected-text read via `wtype` + `wl-paste` when available
 - Double-tap hotkey to cycle modes.
 - Single-tap hotkey to open file-context picker.
 - Voice-triggered toolchains for multi-step desktop actions.
@@ -128,6 +132,14 @@ Build:
 ```bash
 npm run build
 cd src-tauri && cargo check
+
+Runtime smoke tests:
+
+```bash
+cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
+TWOKEY_E2E_SESSION=x11 cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
+TWOKEY_E2E_SESSION=wayland cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
+```
 ```
 
 ## Hotkey Behavior

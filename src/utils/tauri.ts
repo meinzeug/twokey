@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 
 export type DesktopCapabilities = {
   sessionType: string;
+  compositor?: string;
   hotkeysSupported: boolean;
   audioSupported: boolean;
   automationBackend: string;

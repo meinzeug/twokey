@@ -67,21 +67,26 @@ Align runtime behavior with the video UX:
 - CI workflow validates TS and Rust compile checks on each push/PR.
 - Wayland fallback via manual recording controls in the overlay menu.
 - Wayland compatibility matrix tracking document added.
+- Wayland compositor-aware runtime detection for GNOME/KDE/Sway/Hyprland.
+- Wayland automation integration paths:
+  - insertion via `wtype`/`ydotool`
+  - selected-text read via `wtype` + `wl-paste` when available
+- Runtime smoke E2E tests for X11/Wayland added and wired in CI matrix.
 - Updater supports channel-aware release selection and checksum verification.
 - Updater restores previous local AppImage if updated binary start fails.
 - Updater supports staged rollout cohorts via release marker (`twokey-rollout:<percent>`).
 
 ## Remaining Gaps
 
-- Wayland still has hard global hotkey/automation limitations.
+- Wayland still has hard limits for truly global hold-hotkeys depending on compositor security policy.
 - Auto-update remains AppImage-first.
 - Vision answer quality depends on chosen provider/model capability.
 
 ## Hard Gaps Requiring Larger Milestones
 
 1. Remote rollout management (dashboard/control plane) beyond release-note marker control.
-2. Compositor-specific Wayland integrations (GNOME/KWin/wlroots/Hyprland).
-3. End-to-end runtime integration tests across session backends.
+2. Deeper compositor-native Wayland integrations beyond current safe integration paths.
+3. Full end-to-end runtime integration tests on real compositor sessions (beyond smoke-level checks).
 4. Visual toolchain/workflow builder.
 
 ## Validation Snapshot
@@ -93,4 +98,4 @@ Align runtime behavior with the video UX:
 
 1. Improve runtime diagnostics for hotkey/STT failures directly in UI.
 2. Expand provider capability guardrails for full feature matrix (vision/TTS/STT).
-4. Add test matrix and reproducible integration tests for X11 and Wayland.
+3. Expand runtime tests from smoke checks to real interaction E2E scenarios.

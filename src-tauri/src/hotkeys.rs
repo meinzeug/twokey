@@ -8,7 +8,7 @@ use std::{
 use serde::Serialize;
 use tauri::{AppHandle, Emitter, Manager};
 
-use crate::{audio::AudioRecorder, settings, stt};
+use crate::{audio::AudioRecorder, session, settings, stt};
 
 const HOLD_DELAY: Duration = Duration::from_millis(180);
 const DOUBLE_TAP_WINDOW: Duration = Duration::from_millis(420);
@@ -19,6 +19,7 @@ const HOTKEY_RELOAD_INTERVAL: Duration = Duration::from_millis(1200);
 #[serde(rename_all = "camelCase")]
 pub struct DesktopCapabilities {
     pub session_type: String,
+    pub compositor: String,
     pub hotkeys_supported: bool,
     pub audio_supported: bool,
     pub automation_backend: String,
@@ -57,38 +58,58 @@ struct HotkeySpec {
 }
 
 pub fn capabilities() -> DesktopCapabilities {
-    let session_type = std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string());
+    let detected = session::detect();
+    let session_type = detected.raw_session_type.clone();
+    let compositor = session::compositor_label(&detected.compositor).to_string();
     let audio_supported = has_command("pw-record") || has_command("parec") || has_command("arecord");
 
-    match session_type.as_str() {
-        "x11" => DesktopCapabilities {
+    match detected.kind {
+        session::SessionKind::X11 => DesktopCapabilities {
             session_type,
+            compositor,
             hotkeys_supported: true,
             audio_supported,
             automation_backend: "x11-query-keymap".to_string(),
             warning: None,
         },
-        "wayland" => DesktopCapabilities {
+        session::SessionKind::Wayland => DesktopCapabilities {
             session_type,
+            compositor: compositor.clone(),
             hotkeys_supported: false,
             audio_supported,
-            automation_backend: if has_command("wtype") || has_command("ydotool") {
-                "wayland-typed-insert".to_string()
-            } else {
-                "wayland-limited".to_string()
-            },
-            warning: Some(
-                "Wayland blockiert generische globale Hold-Hotkeys. Einfuegen kann ueber wtype/ydotool funktionieren, globale Hold-Hotkeys bleiben eingeschraenkt."
-                    .to_string(),
-            ),
+            automation_backend: wayland_backend_name(&detected.compositor),
+            warning: Some(wayland_warning_message(&detected.compositor)),
         },
-        _ => DesktopCapabilities {
+        session::SessionKind::Unknown => DesktopCapabilities {
             session_type,
+            compositor,
             hotkeys_supported: false,
             audio_supported,
             automation_backend: "unknown".to_string(),
             warning: Some("Desktop-Sitzung konnte nicht sicher erkannt werden.".to_string()),
         },
+    }
+}
+
+fn wayland_backend_name(compositor: &session::WaylandCompositor) -> String {
+    let typing_backend = if has_command("wtype") {
+        "wtype"
+    } else if has_command("ydotool") {
+        "ydotool"
+    } else {
+        "none"
+    };
+
+    format!("wayland-{}-{typing_backend}", session::compositor_label(compositor))
+}
+
+fn wayland_warning_message(compositor: &session::WaylandCompositor) -> String {
+    match compositor {
+        session::WaylandCompositor::Gnome => "Wayland GNOME erkannt: globale Hold-Hotkeys sind eingeschraenkt. Nutze manuelle Aufnahme im Overlay; Einfuegen kann ueber wtype/ydotool funktionieren.".to_string(),
+        session::WaylandCompositor::Kde => "Wayland KDE erkannt: globale Hold-Hotkeys sind eingeschraenkt. Nutze manuelle Aufnahme im Overlay; Einfuegen kann ueber wtype/ydotool funktionieren.".to_string(),
+        session::WaylandCompositor::Sway => "Wayland Sway erkannt: globale Hold-Hotkeys sind compositor-abhaengig. Manuelle Aufnahme bleibt als stabiler Fallback aktiv.".to_string(),
+        session::WaylandCompositor::Hyprland => "Wayland Hyprland erkannt: globale Hold-Hotkeys sind compositor-abhaengig. Manuelle Aufnahme bleibt als stabiler Fallback aktiv.".to_string(),
+        session::WaylandCompositor::Unknown => "Wayland erkannt: globale Hold-Hotkeys sind eingeschraenkt. Nutze manuelle Aufnahme im Overlay; Einfuegen kann ueber wtype/ydotool funktionieren.".to_string(),
     }
 }
 

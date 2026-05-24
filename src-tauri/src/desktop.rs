@@ -5,6 +5,8 @@ use std::{
     time::Duration,
 };
 
+use crate::session;
+
 pub fn insert_text(text: &str) -> Result<(), String> {
     let session_type = session_type();
     if session_type == "wayland" {
@@ -41,11 +43,9 @@ pub fn insert_text(text: &str) -> Result<(), String> {
 }
 
 pub fn read_selected_text() -> Result<String, String> {
-    if session_type() == "wayland" {
-        return Err(
-            "Textauswahl lesen ist unter Wayland nur compositor-spezifisch moeglich. Nutze derzeit Clipboard + Einfuegen als Fallback."
-                .to_string(),
-        );
+    let session_type = session_type();
+    if session_type == "wayland" {
+        return read_selected_text_wayland();
     }
 
     ensure_x11_automation("Textauswahl lesen")?;
@@ -131,6 +131,43 @@ fn insert_text_wayland(text: &str) -> Result<(), String> {
         "Wayland-Einfuegung benoetigt wtype oder ydotool. Installiere eines der Tools fuer sicheres Tippen ohne globale Hotkey-Umgehung."
             .to_string(),
     )
+}
+
+fn read_selected_text_wayland() -> Result<String, String> {
+    if command_exists("wtype") && command_exists("wl-paste") {
+        let status = Command::new("wtype")
+            .args(["-M", "ctrl", "c", "-m", "ctrl"])
+            .status()
+            .map_err(|error| format!("wtype Copy-Shortcut konnte nicht gestartet werden: {error}"))?;
+
+        if !status.success() {
+            return Err(format!("wtype Copy-Shortcut beendete sich mit Status {status}"));
+        }
+
+        thread::sleep(Duration::from_millis(140));
+
+        let output = Command::new("wl-paste")
+            .arg("--no-newline")
+            .output()
+            .map_err(|error| format!("wl-paste konnte nicht gestartet werden: {error}"))?;
+
+        if !output.status.success() {
+            return Err("wl-paste konnte die Auswahl nicht lesen".to_string());
+        }
+
+        let selected = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if selected.is_empty() {
+            return Err("Keine markierte Textauswahl gefunden".to_string());
+        }
+
+        return Ok(selected);
+    }
+
+    let detected = session::detect();
+    let compositor = session::compositor_label(&detected.compositor);
+    Err(format!(
+        "Wayland-Textauswahl lesen erfordert wtype + wl-paste (Compositor: {compositor})."
+    ))
 }
 
 fn session_type() -> String {
