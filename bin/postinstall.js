@@ -16,10 +16,6 @@ const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
 const sudoUser = process.env.SUDO_USER;
 
 if (isRoot && sudoUser && sudoUser !== "root") {
-  if (isDesktopRunningForUser(sudoUser)) {
-    process.exit(0);
-  }
-
   const uid = resolveUid(sudoUser);
   const homeDir = resolveHomeDir(sudoUser);
   const env = { ...process.env };
@@ -32,9 +28,24 @@ if (isRoot && sudoUser && sudoUser !== "root") {
     env.DBUS_SESSION_BUS_ADDRESS = `unix:path=${env.XDG_RUNTIME_DIR}/bus`;
   }
 
+  const runtimePrep = spawn(
+    "sudo",
+    ["-u", sudoUser, "-H", process.execPath, cliPath, "--prepare-runtime-only", "--quiet"],
+    {
+      stdio: "ignore",
+      shell: false,
+      env,
+    },
+  );
+  runtimePrep.on("error", () => undefined);
+
+  if (isDesktopRunningForUser(sudoUser)) {
+    process.exit(0);
+  }
+
   const delegated = spawn(
     "sudo",
-    ["-u", sudoUser, "-H", process.execPath, cliPath, "--desktop", "--enable-autostart"],
+    ["-u", sudoUser, "-H", process.execPath, cliPath, "--prepare-runtime", "--desktop", "--enable-autostart"],
     {
       stdio: "ignore",
       shell: false,
@@ -45,11 +56,18 @@ if (isRoot && sudoUser && sudoUser !== "root") {
   delegated.on("error", () => process.exit(0));
   delegated.on("close", () => process.exit(0));
 } else {
+  const runtimePrep = spawn(process.execPath, [cliPath, "--prepare-runtime-only", "--quiet"], {
+    stdio: "ignore",
+    shell: false,
+  });
+
+  runtimePrep.on("error", () => undefined);
+
   if (isDesktopRunningForUser(process.env.USER || "")) {
     process.exit(0);
   }
 
-  const child = spawn(process.execPath, [cliPath, "--desktop", "--enable-autostart"], {
+  const child = spawn(process.execPath, [cliPath, "--prepare-runtime", "--desktop", "--enable-autostart"], {
     stdio: "ignore",
     shell: false,
   });

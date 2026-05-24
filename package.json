@@ -1,6 +1,6 @@
 {
   "name": "twokey",
-  "version": "1.0.11",
+  "version": "1.0.12",
   "description": "Linux-first desktop AI assistant built with Tauri, React, and TypeScript.",
   "license": "MIT",
   "repository": {
@@ -48,6 +48,7 @@
     "tauri:build": "GTK_MODULES='' LIBGL_ALWAYS_SOFTWARE=1 WEBKIT_DISABLE_DMABUF_RENDERER=1 tauri build"
   },
   "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
     "@tauri-apps/api": "^2.5.0",
     "lucide-react": "^0.468.0",
     "react": "^18.3.1",

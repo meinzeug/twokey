@@ -6,16 +6,21 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
-const VERSION = process.env.npm_package_version || "1.0.11";
+const VERSION = process.env.npm_package_version || "1.0.12";
 const DEFAULT_MODEL = process.env.TWOKEY_OLLAMA_MODEL || "qwen2.5:3b";
 const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11434";
 const LATEST_RELEASE_API = "https://api.github.com/repos/meinzeug/twokey/releases/latest";
 const APPIMAGE_DIR = path.join(os.homedir(), ".local", "share", "twokey", "bin");
 const APPIMAGE_PATH = path.join(APPIMAGE_DIR, "twokey-ai.AppImage");
 const APPIMAGE_META_PATH = path.join(APPIMAGE_DIR, "twokey-ai.meta.json");
+const MANAGED_FFMPEG_PATH = path.join(APPIMAGE_DIR, "ffmpeg");
+const WHISPER_VENV_DIR = path.join(os.homedir(), ".local", "share", "twokey", "whisper-venv");
+const MANAGED_WHISPER_PATH = path.join(WHISPER_VENV_DIR, "bin", "whisper");
 
 const args = process.argv.slice(2);
 const QUIET = args.includes("--quiet");
+const PREPARE_RUNTIME = args.includes("--prepare-runtime");
+const PREPARE_RUNTIME_ONLY = args.includes("--prepare-runtime-only");
 
 if (args.includes("--help") || args.includes("-h")) {
   printHelp();
@@ -27,50 +32,16 @@ if (args.includes("--version") || args.includes("-v")) {
   process.exit(0);
 }
 
-if (args.includes("--desktop")) {
-  launchDesktopApp().then(async (startedCommand) => {
-    if (startedCommand) {
-      if (args.includes("--enable-autostart")) {
-        try {
-          await ensureUserService(startedCommand);
-        } catch (error) {
-          if (!QUIET) {
-            const message = error instanceof Error ? error.message : String(error);
-            console.warn(`Autostart setup skipped: ${message}`);
-          }
-        }
-      }
+if (PREPARE_RUNTIME_ONLY) {
+  ensureRuntimeDependencies()
+    .then(() => process.exit(0))
+    .catch((error) => {
       if (!QUIET) {
-        console.log("TwoKey desktop app started in background.");
+        console.warn(`Runtime setup skipped: ${error.message || String(error)}`);
       }
       process.exit(0);
-    }
-    if (!QUIET) {
-      console.error("No native desktop binary found in PATH.");
-      console.error("Install the .deb/.AppImage release and ensure 'twokey-ai' is available in PATH.");
-    }
-    process.exit(1);
-  });
-}
-
-const onceIndex = args.findIndex((value) => value === "--once");
-if (onceIndex >= 0) {
-  const prompt = args.slice(onceIndex + 1).join(" ").trim();
-  if (!prompt) {
-    console.error("Missing prompt after --once");
-    process.exit(1);
-  }
-
-  runSinglePrompt(prompt).catch((error) => {
-    console.error(error.message || String(error));
-    process.exit(1);
-  });
-} else if (args.includes("--cli")) {
-  startRepl().catch((error) => {
-    console.error(error.message || String(error));
-    process.exit(1);
-  });
-} else {
+    });
+} else if (args.includes("--desktop")) {
   launchDesktopApp().then(async (startedCommand) => {
     if (startedCommand) {
       if (args.includes("--enable-autostart")) {
@@ -96,6 +67,51 @@ if (onceIndex >= 0) {
     }
     process.exit(1);
   });
+} else {
+  const onceIndex = args.findIndex((value) => value === "--once");
+  if (onceIndex >= 0) {
+    const prompt = args.slice(onceIndex + 1).join(" ").trim();
+    if (!prompt) {
+      console.error("Missing prompt after --once");
+      process.exit(1);
+    }
+
+    runSinglePrompt(prompt).catch((error) => {
+      console.error(error.message || String(error));
+      process.exit(1);
+    });
+  } else if (args.includes("--cli")) {
+    startRepl().catch((error) => {
+      console.error(error.message || String(error));
+      process.exit(1);
+    });
+  } else {
+    launchDesktopApp().then(async (startedCommand) => {
+      if (startedCommand) {
+        if (args.includes("--enable-autostart")) {
+          try {
+            await ensureUserService(startedCommand);
+          } catch (error) {
+            if (!QUIET) {
+              const message = error instanceof Error ? error.message : String(error);
+              console.warn(`Autostart setup skipped: ${message}`);
+            }
+          }
+        }
+        if (!QUIET) {
+          console.log("TwoKey desktop app started in background.");
+        }
+        process.exit(0);
+      }
+
+      if (!QUIET) {
+        console.error("Could not start desktop app.");
+        console.error("Tried system binaries and auto-download from GitHub Releases.");
+        console.error("Use 'twokey --cli' to run terminal mode.");
+      }
+      process.exit(1);
+    });
+  }
 }
 
 async function runSinglePrompt(prompt) {
@@ -191,6 +207,17 @@ async function askOllama(prompt) {
 }
 
 async function launchDesktopApp() {
+  if (PREPARE_RUNTIME) {
+    try {
+      await ensureRuntimeDependencies();
+    } catch (error) {
+      if (!QUIET) {
+        const message = error instanceof Error ? error.message : String(error);
+        console.warn(`Runtime dependencies could not be fully prepared: ${message}`);
+      }
+    }
+  }
+
   let appImageReady = false;
   try {
     appImageReady = await ensureLocalAppImage();
@@ -330,6 +357,7 @@ function spawnDetached(command) {
       detached: true,
       stdio: "ignore",
       shell: false,
+      env: withManagedBinPath(process.env),
     });
 
     child.once("spawn", () => {
@@ -343,6 +371,109 @@ function spawnDetached(command) {
   });
 }
 
+async function ensureRuntimeDependencies() {
+  await fs.promises.mkdir(APPIMAGE_DIR, { recursive: true });
+  await ensureManagedFfmpeg();
+  await ensureManagedWhisperCli();
+}
+
+async function ensureManagedFfmpeg() {
+  if (await hasExecutable(MANAGED_FFMPEG_PATH)) {
+    return;
+  }
+
+  let sourcePath = "";
+  try {
+    const module = await import("@ffmpeg-installer/ffmpeg");
+    sourcePath =
+      module?.default?.path
+      || module?.path
+      || module?.default?.default?.path
+      || "";
+  } catch {
+    sourcePath = "";
+  }
+
+  if (!sourcePath) {
+    throw new Error("@ffmpeg-installer/ffmpeg konnte nicht geladen werden");
+  }
+
+  await fs.promises.copyFile(sourcePath, MANAGED_FFMPEG_PATH);
+  await fs.promises.chmod(MANAGED_FFMPEG_PATH, 0o755);
+}
+
+async function ensureManagedWhisperCli() {
+  if (await hasExecutable(MANAGED_WHISPER_PATH)) {
+    return;
+  }
+
+  if (!(await commandExists("python3"))) {
+    throw new Error("python3 fehlt, Whisper-CLI konnte nicht automatisch installiert werden");
+  }
+
+  await fs.promises.mkdir(path.dirname(WHISPER_VENV_DIR), { recursive: true });
+
+  const venvPython = path.join(WHISPER_VENV_DIR, "bin", "python");
+  if (!(await hasExecutable(venvPython))) {
+    await runCommand("python3", ["-m", "venv", WHISPER_VENV_DIR]);
+  }
+
+  await runCommand(venvPython, ["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"]);
+  await runCommand(venvPython, ["-m", "pip", "install", "--upgrade", "openai-whisper"]);
+
+  if (!(await hasExecutable(MANAGED_WHISPER_PATH))) {
+    throw new Error("Whisper wurde installiert, aber das CLI-Binary fehlt");
+  }
+}
+
+async function commandExists(name) {
+  return new Promise((resolve) => {
+    const child = spawn("sh", ["-c", `command -v ${name} >/dev/null 2>&1`], {
+      stdio: "ignore",
+      shell: false,
+    });
+    child.on("error", () => resolve(false));
+    child.on("close", (code) => resolve(code === 0));
+  });
+}
+
+async function runCommand(program, commandArgs) {
+  return new Promise((resolve, reject) => {
+    const child = spawn(program, commandArgs, {
+      shell: false,
+      stdio: QUIET ? "ignore" : "pipe",
+      env: withManagedBinPath(process.env),
+    });
+
+    let stderr = "";
+    if (child.stderr) {
+      child.stderr.on("data", (chunk) => {
+        stderr += String(chunk);
+      });
+    }
+
+    child.on("error", (error) => reject(error));
+    child.on("close", (code) => {
+      if (code === 0) {
+        resolve();
+        return;
+      }
+      reject(new Error(stderr.trim() || `${program} failed with code ${code}`));
+    });
+  });
+}
+
+function withManagedBinPath(baseEnv) {
+  const env = { ...baseEnv };
+  const currentPath = String(env.PATH || "");
+  const parts = currentPath.split(":").filter(Boolean);
+  if (!parts.includes(APPIMAGE_DIR)) {
+    parts.unshift(APPIMAGE_DIR);
+  }
+  env.PATH = parts.join(":");
+  return env;
+}
+
 function printHelp() {
   console.log("twokey <command/options>");
   console.log("");
@@ -352,6 +483,8 @@ function printHelp() {
   console.log("  --cli            Start interactive terminal mode");
   console.log("  --once <prompt>  Send one prompt to Ollama and print response");
   console.log("  --desktop        Start native desktop app in background");
+  console.log("  --prepare-runtime       Install/check local runtime dependencies");
+  console.log("  --prepare-runtime-only  Only install/check dependencies and exit");
   console.log("");
   console.log("Without options, twokey starts the native desktop app in background.");
   console.log("If no desktop binary is installed, twokey tries to download an AppImage from latest GitHub release.");
@@ -369,6 +502,7 @@ async function ensureUserService(command) {
     "After=graphical-session.target",
     "",
     "[Service]",
+    `Environment=PATH=${path.join(os.homedir(), ".local", "share", "twokey", "bin")}:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin`,
     `ExecStart=/bin/sh -lc ${shellEscape(command)}`,
     "Restart=on-failure",
     "RestartSec=3",

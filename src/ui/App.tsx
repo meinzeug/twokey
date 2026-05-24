@@ -614,6 +614,8 @@ function buildConversationPrompt(transcript: string, context: FileContext | null
 }
 
 function SettingsWindow() {
+  type SaveStateKind = "idle" | "saving" | "installing" | "success" | "error";
+
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [providers, setProviders] = useState<ProviderInfo[]>([]);
   const [secretStatus, setSecretStatus] = useState<Record<string, SecretStatus>>({});
@@ -626,6 +628,7 @@ function SettingsWindow() {
   const [hotkeyDraft, setHotkeyDraft] = useState("Ctrl+Space");
   const [activeSection, setActiveSection] = useState("allgemein");
   const [saveState, setSaveState] = useState("Bereit");
+  const [saveStateKind, setSaveStateKind] = useState<SaveStateKind>("idle");
   const [updateState, setUpdateState] = useState("Nicht geprueft");
   const settingsSections = [
     { id: "allgemein", label: "Allgemein" },
@@ -644,7 +647,10 @@ function SettingsWindow() {
   useEffect(() => {
     getSettings()
       .then(setSettings)
-      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
     listProviders().then(setProviders).catch(() => setProviders([]));
     Promise.all([providerApiKeyStatus("openai-compatible"), providerApiKeyStatus("openrouter")])
       .then(([openai, openrouter]) => {
@@ -707,13 +713,21 @@ function SettingsWindow() {
     }
 
     const nextSettings = { ...settings, [key]: value };
+    const installingWhisper = key === "sttProvider" && value === "local-whisper";
     setSettings(nextSettings);
-    setSaveState("Speichere...");
+    setSaveState(installingWhisper ? "Installiere Whisper..." : "Speichere...");
+    setSaveStateKind(installingWhisper ? "installing" : "saving");
     const sideEffect = key === "autostart" ? setAutostart(Boolean(value)) : Promise.resolve();
     sideEffect
       .then(() => saveSettings(nextSettings))
-      .then(() => setSaveState("Gespeichert"))
-      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+      .then(() => {
+        setSaveState(installingWhisper ? "Gespeichert, Whisper installiert" : "Gespeichert");
+        setSaveStateKind("success");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
   };
 
   const saveProviderKey = (providerId: "openai-compatible" | "openrouter") => {
@@ -724,6 +738,7 @@ function SettingsWindow() {
     }
 
     setSaveState("Speichere API-Key...");
+    setSaveStateKind("saving");
     setProviderApiKey(providerId, value)
       .then(() => providerApiKeyStatus(providerId))
       .then((status) => {
@@ -732,12 +747,19 @@ function SettingsWindow() {
         return listProviders();
       })
       .then(setProviders)
-      .then(() => setSaveState("API-Key sicher gespeichert"))
-      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+      .then(() => {
+        setSaveState("API-Key sicher gespeichert");
+        setSaveStateKind("success");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
   };
 
   const removeProviderKey = (providerId: "openai-compatible" | "openrouter") => {
     setSaveState("Entferne API-Key...");
+    setSaveStateKind("saving");
     clearProviderApiKey(providerId)
       .then(() => providerApiKeyStatus(providerId))
       .then((status) => {
@@ -745,8 +767,14 @@ function SettingsWindow() {
         return listProviders();
       })
       .then(setProviders)
-      .then(() => setSaveState("API-Key entfernt"))
-      .catch((error: unknown) => setSaveState(error instanceof Error ? error.message : String(error)));
+      .then(() => {
+        setSaveState("API-Key entfernt");
+        setSaveStateKind("success");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
   };
 
   if (!settings) {
@@ -786,7 +814,10 @@ function SettingsWindow() {
             <p className="eyebrow">Phase 7</p>
             <h1>Einstellungen</h1>
           </div>
-          <span>{saveState}</span>
+          <span className={`status-chip ${saveStateKind}`}>
+            {(saveStateKind === "saving" || saveStateKind === "installing") && <span className="status-spinner" aria-hidden="true" />}
+            <span>{saveState}</span>
+          </span>
         </div>
 
         <div className="settings-form">
@@ -869,6 +900,34 @@ function SettingsWindow() {
                 <option value="local-whisper">Lokal Whisper</option>
               </select>
             </label>
+            {settings.sttProvider === "local-whisper" && (
+              <>
+                <label>
+                  <span>Whisper-Modell</span>
+                  <select value={settings.whisperModel} onChange={(event) => updateSetting("whisperModel", event.target.value)}>
+                    <option value="tiny">tiny (sehr schnell, niedrige Genauigkeit)</option>
+                    <option value="base">base (ausgewogen)</option>
+                    <option value="small">small (bessere Genauigkeit)</option>
+                    <option value="medium">medium (langsamer, genauer)</option>
+                    <option value="large-v3">large-v3 (beste Genauigkeit, langsam)</option>
+                  </select>
+                </label>
+                <label>
+                  <span>Whisper Beam-Size</span>
+                  <input
+                    type="number"
+                    min="1"
+                    max="10"
+                    value={settings.whisperBeamSize}
+                    onChange={(event) => updateSetting("whisperBeamSize", Number(event.target.value))}
+                  />
+                </label>
+                <div className="provider-row">
+                  <strong>Hinweis</strong>
+                  <small>Kleinere Modelle und Beam-Size 1-2 sind schneller. Groessere Modelle und hoehere Beam-Size liefern meist bessere Transkripte, brauchen aber mehr Zeit.</small>
+                </div>
+              </>
+            )}
             <label>
               <span>Chat-Provider</span>
               <select value={settings.preferredChatProvider} onChange={(event) => updateSetting("preferredChatProvider", event.target.value)}>

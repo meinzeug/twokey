@@ -127,8 +127,16 @@ fn get_settings() -> Result<settings::AppSettings, String> {
 }
 
 #[tauri::command]
-fn save_settings(settings: settings::AppSettings) -> Result<(), String> {
-    settings::save(&settings)
+async fn save_settings(settings: settings::AppSettings) -> Result<(), String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        if settings.stt_provider == "local-whisper" {
+            stt::ensure_local_whisper_installed()?;
+        }
+
+        settings::save(&settings)
+    })
+    .await
+    .map_err(|error| format!("Settings-Task ist fehlgeschlagen: {error}"))?
 }
 
 #[tauri::command]

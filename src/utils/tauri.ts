@@ -30,6 +30,8 @@ export type AppSettings = {
   escapeCancel: boolean;
   sttProvider: string;
   defaultLanguage: string;
+  whisperModel: string;
+  whisperBeamSize: number;
   punctuationCleanup: boolean;
   ttsEnabled: boolean;
   ttsVoice: string;
@@ -206,6 +208,8 @@ export async function getSettings(): Promise<AppSettings> {
       escapeCancel: true,
       sttProvider: "mock",
       defaultLanguage: "de",
+      whisperModel: "base",
+      whisperBeamSize: 5,
       punctuationCleanup: false,
       ttsEnabled: false,
       ttsVoice: "piper-default",
