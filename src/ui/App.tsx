@@ -20,6 +20,7 @@ import {
   getHistoryRecent,
   getDesktopCapabilities,
   getSettings,
+  installLatestUpdate,
   insertText,
   listProviders,
   listenForHotkeyEvents,
@@ -27,8 +28,12 @@ import {
   providerApiKeyStatus,
   readSelectedText,
   replaceSelectedText,
+  runToolchainFromText,
   saveSettings,
   setProviderApiKey,
+  submitFeedback,
+  startManualCapture,
+  stopManualCapture,
   setOverlayWindowExpanded,
   setAutostart,
   speakText,
@@ -105,6 +110,7 @@ export function App() {
 }
 
 function OverlayApp() {
+  const DRAG_THRESHOLD_PX = 6;
   const [mode, setMode] = useState<AssistantMode>("conversation");
   const [status, setStatus] = useState<AssistantStatus>("ready");
   const [menuOpen, setMenuOpen] = useState(false);
@@ -121,6 +127,9 @@ function OverlayApp() {
   const [assistantAnswer, setAssistantAnswer] = useState<string | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
   const [fileContext, setFileContext] = useState<FileContext | null>(null);
+  const [manualCaptureActive, setManualCaptureActive] = useState(false);
+  const dragStateRef = useRef({ pressed: false, dragging: false, startX: 0, startY: 0 });
+  const suppressNextClickRef = useRef(false);
   const modeRef = useRef(mode);
   const activeMode = modes[mode];
   const ActiveIcon = activeMode.icon;
@@ -171,6 +180,24 @@ function OverlayApp() {
         });
       }
 
+      if (event.kind === "file-context-pick") {
+        setEventMessage("Oeffne Dateiauswahl...");
+        addFileContext()
+          .then((context) => {
+            if (!mounted) {
+              return;
+            }
+            setFileContext(context);
+            setEventMessage(context.summary);
+          })
+          .catch((error: unknown) => {
+            if (!mounted) {
+              return;
+            }
+            setEventMessage(error instanceof Error ? error.message : String(error));
+          });
+      }
+
       setStatus(event.status);
       setEventMessage(event.message);
 
@@ -187,29 +214,43 @@ function OverlayApp() {
       }
 
       if (event.kind === "transcript-ready" && event.transcript) {
+        setManualCaptureActive(false);
         if (modeRef.current === "conversation") {
           setStatus("thinking");
-          setEventMessage("Ollama denkt...");
+          setEventMessage("Pruefe Toolchains...");
           setAssistantAnswer(null);
 
-          askAssistant(buildConversationPrompt(event.transcript, fileContext))
-            .then((answer) => {
-              if (!mounted) {
+          runToolchainFromText(event.transcript)
+            .then((toolchainMessage) => {
+              if (toolchainMessage) {
+                if (!mounted) {
+                  return;
+                }
+                setStatus("ready");
+                setEventMessage(toolchainMessage);
                 return;
               }
 
-              setStatus("ready");
-              setEventMessage("Antwort bereit.");
-              setAssistantAnswer(answer);
-
-              getSettings()
-                .then((appSettings) => {
-                  if (appSettings.ttsEnabled) {
-                    return speakText(answer).catch(() => undefined);
+              setEventMessage("Assistent denkt...");
+              return askAssistant(buildConversationPrompt(event.transcript, fileContext), fileContext)
+                .then((answer) => {
+                  if (!mounted) {
+                    return;
                   }
-                  return undefined;
-                })
-                .catch(() => undefined);
+
+                  setStatus("ready");
+                  setEventMessage("Antwort bereit.");
+                  setAssistantAnswer(answer);
+
+                  getSettings()
+                    .then((appSettings) => {
+                      if (appSettings.ttsEnabled) {
+                        return speakText(answer).catch(() => undefined);
+                      }
+                      return undefined;
+                    })
+                    .catch(() => undefined);
+                });
             })
             .catch((error: unknown) => {
               if (!mounted) {
@@ -234,19 +275,23 @@ function OverlayApp() {
                   "Markierter Text:",
                   selectedText,
                 ].join("\n\n"),
-              ).then((replacement) => ({ selectedText, replacement })),
+              ).then((replacement) => ({ replacement })),
             )
-            .then(({ selectedText, replacement }) => {
+            .then(({ replacement }) => {
               if (!mounted) {
                 return;
               }
 
-              setStatus("ready");
-              setEventMessage("Textvorschau bereit. Bitte bestaetigen.");
-              setPendingReplacement({
-                original: selectedText,
-                replacement,
-                instruction: event.transcript ?? "",
+              setStatus("writing");
+              setEventMessage("Ersetze markierten Text...");
+              return replaceSelectedText(replacement).then(() => {
+                if (!mounted) {
+                  return;
+                }
+
+                setStatus("ready");
+                setEventMessage("Markierter Text direkt ersetzt.");
+                setPendingReplacement(null);
               });
             })
             .catch((error: unknown) => {
@@ -279,7 +324,22 @@ function OverlayApp() {
               setEventMessage(error instanceof Error ? error.message : String(error));
             });
         } else if (modeRef.current === "feedback") {
-          setEventMessage("Du bist gerade im Feedbackmodus. Wechsle den Modus per Doppeltipp oder ueber das Menue.");
+          setStatus("thinking");
+          submitFeedback(event.transcript)
+            .then((message) => {
+              if (!mounted) {
+                return;
+              }
+              setStatus("ready");
+              setEventMessage(message);
+            })
+            .catch((error: unknown) => {
+              if (!mounted) {
+                return;
+              }
+              setStatus("error");
+              setEventMessage(error instanceof Error ? error.message : String(error));
+            });
         }
       }
     }).then((cleanup) => {
@@ -289,6 +349,39 @@ function OverlayApp() {
     return () => {
       mounted = false;
       unlisten?.();
+    };
+  }, []);
+
+  useEffect(() => {
+    const onMouseMove = (event: MouseEvent) => {
+      const drag = dragStateRef.current;
+      if (!drag.pressed || drag.dragging) {
+        return;
+      }
+
+      const deltaX = Math.abs(event.clientX - drag.startX);
+      const deltaY = Math.abs(event.clientY - drag.startY);
+      if (deltaX + deltaY < DRAG_THRESHOLD_PX) {
+        return;
+      }
+
+      drag.dragging = true;
+      suppressNextClickRef.current = true;
+      startOverlayDrag().catch(() => undefined);
+    };
+
+    const onMouseUp = () => {
+      const drag = dragStateRef.current;
+      drag.pressed = false;
+      drag.dragging = false;
+    };
+
+    window.addEventListener("mousemove", onMouseMove, true);
+    window.addEventListener("mouseup", onMouseUp, true);
+
+    return () => {
+      window.removeEventListener("mousemove", onMouseMove, true);
+      window.removeEventListener("mouseup", onMouseUp, true);
     };
   }, []);
 
@@ -314,19 +407,35 @@ function OverlayApp() {
     setStatus(order[(currentIndex + 1) % order.length] ?? "ready");
   };
 
+  const openSettingsFromOverlay = () => {
+    openSettingsWindow()
+      .then(() => setMenuOpen(false))
+      .catch((error: unknown) => setEventMessage(error instanceof Error ? error.message : String(error)));
+  };
+
   return (
     <main className="overlay-shell" onContextMenu={(event) => event.preventDefault()}>
       <button
         className="pill"
         type="button"
-        onClick={() => setMenuOpen((open) => !open)}
-        onDoubleClick={openSettingsWindow}
+        onClick={() => {
+          if (suppressNextClickRef.current) {
+            suppressNextClickRef.current = false;
+            return;
+          }
+
+          setMenuOpen((open) => !open);
+        }}
+        onDoubleClick={openSettingsFromOverlay}
         onMouseDown={(event) => {
           if (event.button !== 0) {
             return;
           }
 
-          startOverlayDrag().catch(() => undefined);
+          dragStateRef.current.pressed = true;
+          dragStateRef.current.dragging = false;
+          dragStateRef.current.startX = event.clientX;
+          dragStateRef.current.startY = event.clientY;
         }}
       >
         <span className="mode-icon" aria-hidden="true">
@@ -379,7 +488,7 @@ function OverlayApp() {
           </div>
 
           <div className="menu-actions">
-            <button type="button" onClick={openSettingsWindow}>
+            <button type="button" onClick={openSettingsFromOverlay}>
               <Settings size={16} aria-hidden="true" />
               Einstellungen
             </button>
@@ -402,6 +511,24 @@ function OverlayApp() {
               <Mic size={16} aria-hidden="true" />
               Status testen
             </button>
+            {!capabilities.hotkeysSupported ? (
+              <button
+                type="button"
+                onClick={() => {
+                  const next = !manualCaptureActive;
+                  const action = manualCaptureActive ? stopManualCapture() : startManualCapture();
+                  action
+                    .then(() => {
+                      setManualCaptureActive(next);
+                      setEventMessage(next ? "Manuelle Aufnahme gestartet" : "Manuelle Aufnahme gestoppt");
+                    })
+                    .catch((error: unknown) => setEventMessage(error instanceof Error ? error.message : String(error)));
+                }}
+              >
+                <Mic size={16} aria-hidden="true" />
+                {manualCaptureActive ? "Aufnahme stoppen" : "Aufnahme starten"}
+              </button>
+            ) : null}
           </div>
 
           <div className="system-note">
@@ -476,9 +603,11 @@ function buildConversationPrompt(transcript: string, context: FileContext | null
     return transcript;
   }
 
-  const contextText = context.extractedText
-    ? ["Dateikontext:", context.name, context.extractedText].join("\n\n")
-    : ["Dateikontext:", context.name, context.summary, "Diese Datei ist fuer spaetere Vision-Provider vorgemerkt."].join("\n\n");
+  if (context.kind === "image") {
+    return ["Bildkontext:", context.name, context.summary, "Frage:", transcript].join("\n\n");
+  }
+
+  const contextText = context.extractedText ? ["Dateikontext:", context.name, context.extractedText].join("\n\n") : ["Dateikontext:", context.name, context.summary].join("\n\n");
 
   return [contextText, "Nutzerfrage:", transcript].join("\n\n");
 }
@@ -492,16 +621,16 @@ function SettingsWindow() {
     openrouter: "",
   });
   const [historyEntries, setHistoryEntries] = useState<HistoryEntry[]>([]);
+  const [hotkeyCaptureActive, setHotkeyCaptureActive] = useState(false);
+  const [hotkeyDraft, setHotkeyDraft] = useState("Ctrl+Space");
+  const [activeSection, setActiveSection] = useState("allgemein");
   const [saveState, setSaveState] = useState("Bereit");
   const [updateState, setUpdateState] = useState("Nicht geprueft");
   const settingsSections = [
-    "Allgemein",
-    "Hotkeys",
-    "Sprache",
-    "Sprachausgabe",
-    "KI-Provider",
-    "Datenschutz",
-    "Updates",
+    { id: "allgemein", label: "Allgemein" },
+    { id: "hotkeys", label: "Hotkeys" },
+    { id: "sprache-ki", label: "Sprache und KI" },
+    { id: "datenschutz-updates", label: "Datenschutz und Updates" },
   ];
 
   useEffect(() => {
@@ -519,6 +648,50 @@ function SettingsWindow() {
       .catch(() => setSecretStatus({}));
     getHistoryRecent(25).then(setHistoryEntries).catch(() => setHistoryEntries([]));
   }, []);
+
+  useEffect(() => {
+    if (settings) {
+      setHotkeyDraft(settings.mainHotkey);
+    }
+  }, [settings]);
+
+  useEffect(() => {
+    if (!hotkeyCaptureActive) {
+      return;
+    }
+
+    const onKeyDown = (event: KeyboardEvent) => {
+      event.preventDefault();
+      event.stopPropagation();
+
+      const hotkey = formatHotkey(event);
+      if (hotkey) {
+        setHotkeyDraft(hotkey);
+      }
+    };
+
+    const onMouseDown = (event: MouseEvent) => {
+      // Left(0) and right(2) mouse buttons are reserved for normal UI use.
+      if (event.button === 0 || event.button === 2) {
+        return;
+      }
+
+      event.preventDefault();
+      event.stopPropagation();
+
+      const hotkey = formatMouseHotkey(event);
+      if (hotkey) {
+        setHotkeyDraft(hotkey);
+      }
+    };
+
+    window.addEventListener("keydown", onKeyDown, true);
+    window.addEventListener("mousedown", onMouseDown, true);
+    return () => {
+      window.removeEventListener("keydown", onKeyDown, true);
+      window.removeEventListener("mousedown", onMouseDown, true);
+    };
+  }, [hotkeyCaptureActive]);
 
   const updateSetting = <Key extends keyof AppSettings>(key: Key, value: AppSettings[Key]) => {
     if (!settings) {
@@ -588,8 +761,13 @@ function SettingsWindow() {
         </div>
 
         {settingsSections.map((section) => (
-          <button key={section} type="button" className={section === "Allgemein" ? "active" : ""}>
-            {section}
+          <button
+            key={section.id}
+            type="button"
+            className={section.id === activeSection ? "active" : ""}
+            onClick={() => setActiveSection(section.id)}
+          >
+            {section.label}
           </button>
         ))}
       </aside>
@@ -604,6 +782,7 @@ function SettingsWindow() {
         </div>
 
         <div className="settings-form">
+          {activeSection === "allgemein" && (
           <SettingsGroup title="Allgemein">
             <label>
               <span>Autostart</span>
@@ -627,12 +806,34 @@ function SettingsWindow() {
               </select>
             </label>
           </SettingsGroup>
+          )}
 
+          {activeSection === "hotkeys" && (
           <SettingsGroup title="Hotkeys">
             <label>
               <span>Haupt-Hotkey</span>
               <input value={settings.mainHotkey} onChange={(event) => updateSetting("mainHotkey", event.target.value)} />
             </label>
+            <div className="hotkey-capture-row">
+              <strong>Hotkey aufnehmen</strong>
+              <span>{hotkeyCaptureActive ? "Druecke jetzt die Tastenkombination" : hotkeyDraft}</span>
+              <button
+                type="button"
+                onClick={() => {
+                  if (hotkeyCaptureActive) {
+                    setHotkeyCaptureActive(false);
+                    if (hotkeyDraft.trim()) {
+                      updateSetting("mainHotkey", hotkeyDraft.trim());
+                    }
+                  } else {
+                    setHotkeyCaptureActive(true);
+                    setHotkeyDraft(settings.mainHotkey);
+                  }
+                }}
+              >
+                {hotkeyCaptureActive ? "Uebernehmen" : "Aufnahme starten"}
+              </button>
+            </div>
             <label>
               <span>Doppeltipp ms</span>
               <input
@@ -648,7 +849,9 @@ function SettingsWindow() {
               <input type="checkbox" checked={settings.escapeCancel} onChange={(event) => updateSetting("escapeCancel", event.target.checked)} />
             </label>
           </SettingsGroup>
+          )}
 
+          {activeSection === "sprache-ki" && (
           <SettingsGroup title="Sprache und KI">
             <label>
               <span>STT-Anbieter</span>
@@ -749,7 +952,9 @@ function SettingsWindow() {
               ))}
             </div>
           </SettingsGroup>
+          )}
 
+          {activeSection === "datenschutz-updates" && (
           <SettingsGroup title="Datenschutz und Updates">
             <label>
               <span>Verlauf speichern</span>
@@ -787,6 +992,17 @@ function SettingsWindow() {
               >
                 Nach Updates suchen
               </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUpdateState("Installiere Update...");
+                  installLatestUpdate()
+                    .then((message) => setUpdateState(message))
+                    .catch((error: unknown) => setUpdateState(error instanceof Error ? error.message : String(error)));
+                }}
+              >
+                Update installieren
+              </button>
               <span>{updateState}</span>
             </div>
             <div className="provider-list">
@@ -801,10 +1017,99 @@ function SettingsWindow() {
               ))}
             </div>
           </SettingsGroup>
+          )}
         </div>
       </section>
     </main>
   );
+}
+
+function formatHotkey(event: KeyboardEvent): string {
+  const parts: string[] = [];
+  if (event.ctrlKey) {
+    parts.push("Ctrl");
+  }
+  if (event.altKey) {
+    parts.push("Alt");
+  }
+  if (event.shiftKey) {
+    parts.push("Shift");
+  }
+  if (event.metaKey) {
+    parts.push("Meta");
+  }
+
+  const key = normalizeHotkeyKey(event.key);
+  if (!key) {
+    return parts.join("+");
+  }
+
+  parts.push(key);
+  return parts.join("+");
+}
+
+function formatMouseHotkey(event: MouseEvent): string {
+  const parts: string[] = [];
+  if (event.ctrlKey) {
+    parts.push("Ctrl");
+  }
+  if (event.altKey) {
+    parts.push("Alt");
+  }
+  if (event.shiftKey) {
+    parts.push("Shift");
+  }
+  if (event.metaKey) {
+    parts.push("Meta");
+  }
+
+  const button = normalizeMouseButton(event.button);
+  if (!button) {
+    return parts.join("+");
+  }
+
+  parts.push(button);
+  return parts.join("+");
+}
+
+function normalizeHotkeyKey(key: string): string {
+  switch (key) {
+    case " ":
+      return "Space";
+    case "Control":
+    case "Shift":
+    case "Alt":
+    case "Meta":
+      return "";
+    default:
+      break;
+  }
+
+  if (key.startsWith("Arrow")) {
+    return key.replace("Arrow", "");
+  }
+
+  if (key.length === 1) {
+    return key.toUpperCase();
+  }
+
+  return key;
+}
+
+function normalizeMouseButton(button: number): string {
+  switch (button) {
+    case 1:
+      return "MouseMiddle";
+    case 3:
+      return "MouseBack";
+    case 4:
+      return "MouseForward";
+    default:
+      if (button > 4) {
+        return `Mouse${button}`;
+      }
+      return "";
+  }
 }
 
 function SettingsGroup({ title, children }: { title: string; children: ReactNode }) {

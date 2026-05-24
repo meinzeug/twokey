@@ -1,85 +1,61 @@
 # Roadmap
 
-## Phase 1: Projektstruktur und Dummy-Overlay
+## Done
 
-- Tauri app foundation.
-- Overlay pill.
-- Dummy modes.
-- Settings placeholder.
-- Initial docs.
+### Core Interaction
 
-## Phase 2: Global Hotkey + Audioaufnahme
+- Floating pill overlay.
+- Hold hotkey voice pipeline.
+- Double-tap mode cycle.
+- Single-tap file-context trigger.
 
-- Hold-to-record lifecycle.
-- Double-tap mode switching.
-- Escape cancellation.
-- X11 first, Wayland capability messaging.
+### AI Workflows
 
-## Phase 3: STT Mock + echtes STT
+- Conversation mode with provider routing.
+- Toolchain trigger execution from spoken transcript.
+- Direct edit/replace flow for selected text.
+- Dictation insertion flow.
+- Feedback capture and persistence.
 
-- Mock transcriber for development.
-- Local Whisper option.
-- OpenAI-compatible STT option.
+### Context + Providers
 
-## Phase 4: Gesprächsmodus mit Ollama
+- File context load (text/pdf/image metadata).
+- Context-aware provider chat routing.
+- Vision request path for image context.
+- Hybrid local/online provider strategy with local preference option.
 
-- Ollama provider.
-- Basic chat routing.
-- Overlay response display.
+### Runtime Services
 
-## Phase 5: Diktiermodus
+- STT providers wired from settings.
+- Optional TTS answer playback.
+- Tray menu and settings.
+- SQLite history/audit.
+- Secure API key storage.
 
-- Transcription insertion flow.
-- Optional punctuation cleanup.
+## In Progress
 
-## Phase 6: Text markieren, lesen, ersetzen
+- Better guardrails and failure UX for provider capability mismatches.
+- Better hotkey diagnostics and live status observability.
 
-- X11 selected-text read.
-- Clipboard preservation.
-- Preview/confirm replacement.
-- Wayland limitations documented in UI.
+## Planned
 
-## Phase 7: Settings UI
+### Desktop Automation
 
-- Persistent settings.
-- Hotkeys.
-- Theme.
-- Provider and privacy preferences.
+- Visual editor for reusable toolchains/macros.
+- Richer action catalog (window placement, sequence timing, app state checks).
 
-## Phase 8: Provider-System
+### Platform Hardening
 
-- Ollama.
-- OpenAI-compatible APIs.
-- OpenRouter-compatible APIs.
-- Per-mode defaults.
+- Wayland-specific UX paths and clearer fallbacks.
+- Expanded Linux compositor compatibility matrix.
 
-## Phase 9: Datei-Kontext
+### Update/Release Hardening
 
-- TXT/MD direct load.
-- PDF extraction.
-- Image context for vision providers.
+- Signed release artifacts.
+- Safer update install flow with rollback.
+- Optional background update download.
 
-## Phase 10: Packaging
+### Quality
 
-- AppImage.
-- `.deb`.
-- Desktop launcher.
-- Autostart entry.
-
-## Phase 11: Auto-Update
-
-- GitHub release check.
-- Stable/beta/dev channels.
-- Manual download prompt first.
-
-## Phase 12: Stabilisierung
-
-- Cross-desktop testing.
-- Error reporting.
-- Accessibility and UX polish.
-- Packaging hardening.
-
-## Current Completion Note
-
-Phases 1 through 12 have initial implementations or explicit safe placeholders.
-The app is not production-complete; remaining hardening is tracked in `docs/STATUS.md`.
+- Integration tests for end-to-end voice pipeline.
+- Snapshot/regression tests for settings and overlay interactions.

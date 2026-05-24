@@ -1,30 +1,34 @@
 # Security
 
-## Baseline
+## Core Rules
 
-TwoKey must be conservative because it operates near global input, selected text, clipboard content, and potentially sensitive documents.
+- Never execute destructive actions without explicit user intent.
+- Make external provider usage transparent.
+- Keep secrets out of source code and config JSON.
 
-## Confirmation Required
+## Data Protection
 
-The app must not perform these actions without explicit confirmation:
+- API keys are stored in the OS keyring.
+- Runtime history is stored locally in SQLite.
+- Settings are stored in user config directory.
 
-- Delete files.
-- Move files.
-- Execute terminal commands.
-- Change system configuration.
-- Send emails.
-- Submit forms.
+## Desktop Automation Safety
 
-## Text Editing
+- Desktop insertion/replacement is mode-bound and user-triggered via hotkey.
+- Escape can cancel active recording.
+- Wayland restrictions are reported explicitly.
 
-The default behavior for replacing selected text should be preview first, then confirm. A later setting may allow immediate replacement for trusted workflows.
+## Current Trade-offs
 
-## Provider Privacy
+- Edit mode currently applies replacement directly after model output to match low-friction workflow.
+- For sensitive environments, a preview-confirm toggle should be added as follow-up hardening.
 
-External provider use must be visible when selected text, documents, images, or transcripts leave the machine.
+## External Calls
 
-API keys must be stored through a secure local mechanism where possible and never committed to source code.
+Potential outbound data paths:
 
-## Clipboard Handling
+- OpenAI-compatible STT/chat
+- OpenRouter chat
+- release update check (GitHub API)
 
-Future clipboard-based automation must save and restore existing clipboard content. Failures must be visible to the user.
+Users must configure provider keys explicitly; no implicit cloud provider activation.

@@ -342,6 +342,7 @@ p {
   display: grid;
   grid-template-columns: 238px minmax(0, 1fr);
   background: #0c0f14;
+  color-scheme: dark;
 }
 
 .settings-nav {
@@ -392,6 +393,9 @@ p {
 }
 
 .settings-content {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
   padding: 28px;
 }
 
@@ -408,13 +412,17 @@ p {
 }
 
 .settings-form {
+  flex: 1;
+  min-height: 0;
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
 }
 
 .setting-card {
-  min-height: 138px;
+  height: 100%;
+  min-height: 280px;
+  overflow: auto;
   border: 1px solid rgba(255, 255, 255, 0.1);
   border-radius: 8px;
   padding: 18px;
@@ -456,6 +464,20 @@ p {
   background: #0c111a;
 }
 
+.setting-fields select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 34px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 14 14'%3E%3Cpath fill='%23d9e6f8' d='M3.2 5.3a.75.75 0 0 1 1.06 0L7 8.04 9.74 5.3a.75.75 0 1 1 1.06 1.06L7.53 9.62a.75.75 0 0 1-1.06 0L3.2 6.36a.75.75 0 0 1 0-1.06Z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+}
+
+.setting-fields select option {
+  color: #eef4fb;
+  background: #0c111a;
+}
+
 .setting-fields input[type="checkbox"] {
   justify-self: end;
   width: 18px;
@@ -487,6 +509,35 @@ p {
   color: #96a4b6;
   font-size: 12px;
   line-height: 1.35;
+}
+
+.hotkey-capture-row {
+  border: 1px solid rgba(117, 224, 195, 0.25);
+  border-radius: 8px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  background: rgba(117, 224, 195, 0.08);
+}
+
+.hotkey-capture-row strong {
+  color: #eaf5ff;
+  font-size: 13px;
+}
+
+.hotkey-capture-row span {
+  color: #93b3d2;
+  font-size: 12px;
+}
+
+.hotkey-capture-row button {
+  min-height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  padding: 0 12px;
+  color: #f5f7fb;
+  background: rgba(255, 255, 255, 0.08);
+  cursor: pointer;
 }
 
 .update-check {

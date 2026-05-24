@@ -134,12 +134,31 @@ export async function askOllama(prompt: string): Promise<string> {
   return invoke<string>("ask_ollama", { prompt });
 }
 
-export async function askAssistant(prompt: string): Promise<string> {
+export async function askAssistant(prompt: string, fileContext?: FileContext | null): Promise<string> {
   if (!isTauriRuntime()) {
     return "Browser-Vorschau: Assistent ist nur in der nativen Tauri-App verfuegbar.";
   }
 
-  return invoke<string>("ask_assistant", { prompt });
+  return invoke<string>("ask_assistant", {
+    prompt,
+    file_context: fileContext
+      ? {
+          path: fileContext.path,
+          name: fileContext.name,
+          kind: fileContext.kind,
+          summary: fileContext.summary,
+          extractedText: fileContext.extractedText ?? null,
+        }
+      : null,
+  });
+}
+
+export async function submitFeedback(text: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "Feedback wurde in der Browser-Vorschau nicht gespeichert.";
+  }
+
+  return invoke<string>("submit_feedback", { text });
 }
 
 export async function speakText(text: string): Promise<string> {
@@ -252,6 +271,38 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
   }
 
   return invoke<UpdateStatus>("check_for_updates");
+}
+
+export async function installLatestUpdate(): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann kein Desktop-Update installieren.");
+  }
+
+  return invoke<string>("install_latest_update");
+}
+
+export async function runToolchainFromText(text: string): Promise<string | null> {
+  if (!isTauriRuntime()) {
+    return null;
+  }
+
+  return invoke<string | null>("run_toolchain_from_text", { text });
+}
+
+export async function startManualCapture(): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("start_manual_capture");
+}
+
+export async function stopManualCapture(): Promise<void> {
+  if (!isTauriRuntime()) {
+    return;
+  }
+
+  await invoke("stop_manual_capture");
 }
 
 export async function setProviderApiKey(providerId: string, apiKey: string): Promise<void> {

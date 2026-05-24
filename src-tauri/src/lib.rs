@@ -1,7 +1,10 @@
 use std::sync::{Arc, Mutex};
 
 use audio::AudioRecorder;
-use tauri::{AppHandle, LogicalSize, Manager, Size};
+use serde::Serialize;
+use tauri::{
+    AppHandle, Emitter, LogicalSize, Manager, Size, WebviewUrl, WebviewWindow, WebviewWindowBuilder,
+};
 
 mod audio;
 mod autostart;
@@ -14,9 +17,21 @@ mod provider;
 mod secrets;
 mod settings;
 mod stt;
+mod toolchains;
 mod tray;
 mod tts;
 mod updater;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct UiHotkeyEvent {
+    kind: &'static str,
+    status: &'static str,
+    message: String,
+    audio_path: Option<String>,
+    transcript: Option<String>,
+    provider: Option<String>,
+}
 
 #[tauri::command]
 fn get_desktop_session_type() -> String {
@@ -30,13 +45,34 @@ fn get_desktop_capabilities() -> hotkeys::DesktopCapabilities {
 
 #[tauri::command]
 fn open_settings_window(app: AppHandle) -> Result<(), String> {
-    let window = app
-        .get_webview_window("settings")
-        .ok_or_else(|| "Settings window is not configured".to_string())?;
+    let window = ensure_settings_window(&app)?;
 
+    window.unminimize().map_err(|error| error.to_string())?;
     window.show().map_err(|error| error.to_string())?;
+    window.set_always_on_top(true).map_err(|error| error.to_string())?;
     window.set_focus().map_err(|error| error.to_string())?;
+    window.set_always_on_top(false).map_err(|error| error.to_string())?;
     Ok(())
+}
+
+fn ensure_settings_window(app: &AppHandle) -> Result<WebviewWindow, String> {
+    if let Some(window) = app.get_webview_window("settings") {
+        return Ok(window);
+    }
+
+    WebviewWindowBuilder::new(
+        app,
+        "settings",
+        WebviewUrl::App("index.html?view=settings".into()),
+    )
+    .title("TwoKey Einstellungen")
+    .inner_size(920.0, 680.0)
+    .min_inner_size(760.0, 560.0)
+    .center()
+    .visible(false)
+    .resizable(true)
+    .build()
+    .map_err(|error| format!("Settings window could not be created: {error}"))
 }
 
 #[tauri::command]
@@ -61,8 +97,8 @@ fn ask_ollama(prompt: String) -> Result<String, String> {
 }
 
 #[tauri::command]
-fn ask_assistant(prompt: String) -> Result<String, String> {
-    provider::chat(&prompt)
+fn ask_assistant(prompt: String, file_context: Option<provider::ChatFileContext>) -> Result<String, String> {
+    provider::chat_with_context(&prompt, file_context)
 }
 
 #[tauri::command]
@@ -135,6 +171,109 @@ fn check_for_updates() -> Result<updater::UpdateStatus, String> {
     updater::check()
 }
 
+#[tauri::command]
+fn install_latest_update() -> Result<String, String> {
+    updater::install_latest_appimage()
+}
+
+#[tauri::command]
+fn submit_feedback(text: String) -> Result<String, String> {
+    history::record(history::AuditEvent {
+        kind: "feedback".to_string(),
+        mode: Some("feedback".to_string()),
+        provider: None,
+        input_text: Some(text),
+        output_text: None,
+        metadata_json: None,
+        success: true,
+    })?;
+
+    Ok("Danke fuer dein Feedback. Es wurde lokal gespeichert und kann in der Historie eingesehen werden.".to_string())
+}
+
+#[tauri::command]
+fn run_toolchain_from_text(text: String) -> Result<Option<String>, String> {
+    toolchains::run_for_transcript(&text)
+}
+
+#[tauri::command]
+fn start_manual_capture(app: AppHandle) -> Result<(), String> {
+    let recorder = app.state::<Arc<Mutex<AudioRecorder>>>().inner().clone();
+    let path = recorder
+        .lock()
+        .map_err(|_| "Recorder-State ist gesperrt".to_string())?
+        .start()?;
+
+    let _ = app.emit(
+        "twokey://hotkey-event",
+        UiHotkeyEvent {
+            kind: "recording-started",
+            status: "listening",
+            message: "Höre zu... Aufnahme laeuft.".to_string(),
+            audio_path: Some(path.to_string_lossy().to_string()),
+            transcript: None,
+            provider: None,
+        },
+    );
+
+    Ok(())
+}
+
+#[tauri::command]
+fn stop_manual_capture(app: AppHandle) -> Result<(), String> {
+    let recorder = app.state::<Arc<Mutex<AudioRecorder>>>().inner().clone();
+    let stopped_path = recorder
+        .lock()
+        .map_err(|_| "Recorder-State ist gesperrt".to_string())?
+        .stop()?;
+
+    if let Some(path) = stopped_path {
+        let _ = app.emit(
+            "twokey://hotkey-event",
+            UiHotkeyEvent {
+                kind: "recording-stopped",
+                status: "transcribing",
+                message: "Audioaufnahme gespeichert. Transkribiere...".to_string(),
+                audio_path: Some(path.to_string_lossy().to_string()),
+                transcript: None,
+                provider: None,
+            },
+        );
+
+        let app_handle = app.clone();
+        std::thread::spawn(move || match stt::transcribe(&path) {
+            Ok(transcript) => {
+                let _ = app_handle.emit(
+                    "twokey://hotkey-event",
+                    UiHotkeyEvent {
+                        kind: "transcript-ready",
+                        status: "ready",
+                        message: "Transkription abgeschlossen. Starte KI-Verarbeitung.".to_string(),
+                        audio_path: Some(path.to_string_lossy().to_string()),
+                        transcript: Some(transcript.text),
+                        provider: Some(transcript.provider),
+                    },
+                );
+            }
+            Err(error) => {
+                let _ = app_handle.emit(
+                    "twokey://hotkey-event",
+                    UiHotkeyEvent {
+                        kind: "error",
+                        status: "error",
+                        message: error,
+                        audio_path: Some(path.to_string_lossy().to_string()),
+                        transcript: None,
+                        provider: None,
+                    },
+                );
+            }
+        });
+    }
+
+    Ok(())
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
@@ -153,6 +292,7 @@ pub fn run() {
             ask_ollama,
             clear_provider_api_key,
             check_for_updates,
+            install_latest_update,
             get_desktop_capabilities,
             get_desktop_session_type,
             get_settings,
@@ -164,9 +304,13 @@ pub fn run() {
             read_selected_text,
             replace_selected_text,
             save_settings,
+            run_toolchain_from_text,
+            start_manual_capture,
+            stop_manual_capture,
             set_overlay_window_expanded,
             set_provider_api_key,
             speak_text,
+            submit_feedback,
             set_autostart
         ])
         .run(tauri::generate_context!())

@@ -1,45 +1,47 @@
 # Foundations
 
-## Vision
+## Product Vision
 
-TwoKey Linux AI Assistant is a small desktop assistant for speaking or working with AI without opening a browser, chat tab, or separate editor. The user should hold two keys, speak, release, and receive the result in the current desktop context.
+TwoKey should let users operate AI during normal desktop work with minimal friction:
 
-## Core Principle: AI Without Context Switching
+- hold hotkey, speak, release
+- AI handles the request in the current work context
+- no browser tab or dedicated chat app switching required
 
-The assistant should live at the edge of the desktop as a compact overlay. It should help inside the user's current application rather than pulling the user into a large chat interface.
+## Core UX Principles
 
-## Mode Concept
+- The pill is ambient and lightweight.
+- Status states are always visible (ready/listening/transcribing/thinking/writing/error).
+- Mode switching is fast and predictable.
+- Recovery paths are explicit when OS capabilities are missing.
 
-- Conversation: ask a question, optionally using selected text or files as context.
-- Edit Text: read selected text, transform it with a spoken instruction, then preview or replace it.
-- Dictation: transcribe speech and insert text at the cursor.
-- Feedback: capture local product feedback instead of treating every utterance as a general AI request.
-- File Context: attach PDFs, images, screenshots, text, or Markdown to the current AI context.
+## Modes
 
-## Privacy Principles
+- Conversation: ask and receive AI answers, optional TTS playback.
+- Edit Text: transform selected text by voice instruction and apply replacement.
+- Dictation: insert spoken text at cursor.
+- Feedback: capture product feedback into local history.
 
-- Prefer local processing when possible.
-- Make external API use visible before sensitive data leaves the machine.
-- Store configuration and data in XDG-compliant locations.
-- Never hard-code API keys.
-- Keep an audit trail for provider/model use and errors.
+## Context Model
 
-## Local/Online Hybrid Strategy
+- Single-tap hotkey can trigger file-context selection.
+- Context can include text files, PDF extraction, or image references.
+- Providers receive context-aware prompts.
 
-TwoKey should support Ollama and local speech/TTS tools for private workflows, while allowing OpenAI-compatible and OpenRouter-compatible providers for tasks that need stronger online models or vision support.
+## Privacy and Routing
 
-Routing decisions must be explicit and inspectable. Sensitive text editing should prefer local models by default.
+- Prefer local model routing where possible.
+- Use secure key storage for online APIs.
+- Keep local audit trail of STT/chat/TTS/feedback events.
 
-## UX Principles
+## Constraints
 
-- Minimal overlay, not a chat application.
-- Clear status states: ready, listening, transcribing, thinking, writing, error.
-- Direct recovery when Linux desktop permissions or Wayland restrictions block an action.
-- User confirmation before destructive or risky operations.
-- Fast mode switching through hotkeys and the overlay menu.
+- Linux desktop target first.
+- X11 currently offers best hotkey/automation reliability.
+- Wayland remains constrained by compositor/security model.
 
-## Non-Goals
+## Non-Goals (Current Scope)
 
-- Phase 1 does not implement real AI, global hotkeys, audio capture, STT, TTS, text injection, or file parsing.
-- The app will not silently bypass Wayland security restrictions.
-- The app will not execute shell commands, send emails, modify files, or submit forms without explicit confirmation.
+- No full autonomous multi-step OS orchestration yet.
+- No silent bypass of platform security restrictions.
+- No unsigned automatic background update installer flow.

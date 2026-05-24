@@ -2,26 +2,31 @@
 
 ## X11
 
-X11 allows broad desktop automation. This makes global hotkeys, selected text access, clipboard workflows, and keyboard simulation practical, but also increases security responsibility.
+Supported and used as primary path:
 
-Phase 2 implements the first X11 path by polling `XQueryKeymap` for `Ctrl+Space` and `Escape`.
-This is intentionally simple and will be moved behind a helper daemon boundary as the app grows.
-Phase 6 should audit clipboard restoration carefully.
+- global hold hotkeys
+- selected text read/replace automation
+- clipboard-based insertion flows
+
+Dependencies may be needed:
+
+- xdotool
+- xclip or xsel
 
 ## Wayland
 
-Wayland intentionally restricts global input capture and synthetic input. This protects users, but it means some workflows cannot be implemented generically across all compositors.
+Known constraints:
 
-TwoKey must detect Wayland and explain unavailable capabilities instead of failing silently.
+- generic global hold hotkeys are often blocked
+- synthetic input and global capture are compositor-restricted
 
-Possible Wayland routes:
+TwoKey behavior on Wayland:
 
-- Desktop portals where available.
-- Compositor-specific protocols where acceptable.
-- `ydotool` with clear installation and permission guidance.
-- Clipboard tools such as `wl-copy`/`wl-paste` only where they actually solve the workflow.
+- reports capability limits explicitly
+- allows manual start/stop recording from overlay menu as fallback
+- avoids silent failure or fake success
 
-## Current Phase
+## Practical Guidance
 
-Phase 2 detects Wayland and reports that generic global hold-hotkeys are unavailable.
-It does not silently pretend that Wayland automation works.
+For full current feature set, use X11 session.
+Wayland support requires compositor-specific or portal-based expansion and remains partial.
