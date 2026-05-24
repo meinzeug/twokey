@@ -28,10 +28,13 @@ Start the tool directly:
 twokey
 ```
 
+Default behavior: start the native desktop app in background.
+
 Useful CLI options:
 
 ```bash
 twokey --help
+twokey --cli
 twokey --once "Erklaere kurz den Unterschied zwischen X11 und Wayland"
 twokey --desktop
 ```

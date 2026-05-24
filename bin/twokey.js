@@ -3,7 +3,7 @@
 import { spawn } from "node:child_process";
 import readline from "node:readline";
 
-const VERSION = "1.0.1";
+const VERSION = "1.0.2";
 const DEFAULT_MODEL = process.env.TWOKEY_OLLAMA_MODEL || "qwen2.5:3b";
 const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11434";
 
@@ -20,8 +20,15 @@ if (args.includes("--version") || args.includes("-v")) {
 }
 
 if (args.includes("--desktop")) {
-  launchDesktopApp();
-  process.exit(0);
+  launchDesktopApp().then((started) => {
+    if (started) {
+      console.log("TwoKey desktop app started in background.");
+      process.exit(0);
+    }
+    console.error("No native desktop binary found in PATH.");
+    console.error("Install the .deb/.AppImage release and ensure 'twokey-ai' is available in PATH.");
+    process.exit(1);
+  });
 }
 
 const onceIndex = args.findIndex((value) => value === "--once");
@@ -36,9 +43,21 @@ if (onceIndex >= 0) {
     console.error(error.message || String(error));
     process.exit(1);
   });
-} else {
+} else if (args.includes("--cli")) {
   startRepl().catch((error) => {
     console.error(error.message || String(error));
+    process.exit(1);
+  });
+} else {
+  launchDesktopApp().then((started) => {
+    if (started) {
+      console.log("TwoKey desktop app started in background.");
+      process.exit(0);
+    }
+
+    console.error("No native desktop binary found in PATH.");
+    console.error("Install the .deb/.AppImage release and ensure 'twokey-ai' is available in PATH.");
+    console.error("Use 'twokey --cli' to run terminal mode.");
     process.exit(1);
   });
 }
@@ -135,18 +154,40 @@ async function askOllama(prompt) {
   return content;
 }
 
-function launchDesktopApp() {
-  const candidates = ["twokey-ai", "twokey"];
+async function launchDesktopApp() {
+  const candidates = [];
+  if (process.env.TWOKEY_DESKTOP_CMD) {
+    candidates.push(process.env.TWOKEY_DESKTOP_CMD);
+  }
+  candidates.push("twokey-ai", "twokey-desktop");
+
   for (const command of candidates) {
-    const child = spawn(command, { stdio: "inherit" });
-    child.on("error", () => undefined);
-    child.on("spawn", () => {
-      process.exit(0);
-    });
+    const started = await spawnDetached(command);
+    if (started) {
+      return true;
+    }
   }
 
-  console.error("No native desktop binary found in PATH.");
-  console.error("Install the .deb/.AppImage release or run plain 'twokey' for CLI mode.");
+  return false;
+}
+
+function spawnDetached(command) {
+  return new Promise((resolve) => {
+    const child = spawn(command, [], {
+      detached: true,
+      stdio: "ignore",
+      shell: false,
+    });
+
+    child.once("spawn", () => {
+      child.unref();
+      resolve(true);
+    });
+
+    child.once("error", () => {
+      resolve(false);
+    });
+  });
 }
 
 function printHelp() {
@@ -155,8 +196,9 @@ function printHelp() {
   console.log("Options:");
   console.log("  --help, -h       Show help");
   console.log("  --version, -v    Show version");
+  console.log("  --cli            Start interactive terminal mode");
   console.log("  --once <prompt>  Send one prompt to Ollama and print response");
-  console.log("  --desktop        Start native desktop app if installed in PATH");
+  console.log("  --desktop        Start native desktop app in background");
   console.log("");
-  console.log("Without options, twokey starts interactive CLI mode.");
+  console.log("Without options, twokey starts the native desktop app in background.");
 }
