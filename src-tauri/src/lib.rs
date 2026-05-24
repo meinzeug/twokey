@@ -150,6 +150,11 @@ fn list_providers() -> Vec<provider::ProviderInfo> {
 }
 
 #[tauri::command]
+fn get_local_whisper_diagnostics() -> stt::LocalWhisperDiagnostics {
+    stt::local_whisper_diagnostics()
+}
+
+#[tauri::command]
 fn history_recent(limit: Option<u32>) -> Result<Vec<history::HistoryEntry>, String> {
     history::list_recent(limit.unwrap_or(50))
 }
@@ -307,6 +312,7 @@ pub fn run() {
             history_recent,
             insert_text,
             list_providers,
+            get_local_whisper_diagnostics,
             open_settings_window,
             provider_api_key_status,
             read_selected_text,

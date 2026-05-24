@@ -19,6 +19,7 @@ import {
   clearProviderApiKey,
   getHistoryRecent,
   getDesktopCapabilities,
+  getLocalWhisperDiagnostics,
   getSettings,
   installLatestUpdate,
   insertText,
@@ -221,36 +222,52 @@ function OverlayApp() {
           setEventMessage("Pruefe Toolchains...");
           setAssistantAnswer(null);
 
-          runToolchainFromText(transcript)
-            .then((toolchainMessage) => {
-              if (toolchainMessage) {
-                if (!mounted) {
-                  return;
-                }
-                setStatus("ready");
-                setEventMessage(toolchainMessage);
+          Promise.all([getSettings().catch(() => null), listProviders().catch(() => [])])
+            .then(([appSettings, providerList]) => {
+              if (!mounted) {
                 return;
               }
 
-              setEventMessage("Assistent denkt...");
-              return askAssistant(buildConversationPrompt(transcript, fileContext), fileContext)
-                .then((answer) => {
-                  if (!mounted) {
+              if (fileContext?.kind === "image" && appSettings?.preferredChatProvider) {
+                const preferredProvider = providerList.find((provider) => provider.id === appSettings.preferredChatProvider);
+                if (preferredProvider && !preferredProvider.supportsVision) {
+                  setStatus("error");
+                  setEventMessage(`Der Provider '${preferredProvider.label}' unterstuetzt kein Bildverstaendnis. Bitte in den Einstellungen einen Vision-faehigen Provider waehlen.`);
+                  return;
+                }
+              }
+
+              return runToolchainFromText(transcript)
+                .then((toolchainMessage) => {
+                  if (toolchainMessage) {
+                    if (!mounted) {
+                      return;
+                    }
+                    setStatus("ready");
+                    setEventMessage(toolchainMessage);
                     return;
                   }
 
-                  setStatus("ready");
-                  setEventMessage("Antwort bereit.");
-                  setAssistantAnswer(answer);
-
-                  getSettings()
-                    .then((appSettings) => {
-                      if (appSettings.ttsEnabled) {
-                        return speakText(answer).catch(() => undefined);
+                  setEventMessage("Assistent denkt...");
+                  return askAssistant(buildConversationPrompt(transcript, fileContext), fileContext)
+                    .then((answer) => {
+                      if (!mounted) {
+                        return;
                       }
-                      return undefined;
-                    })
-                    .catch(() => undefined);
+
+                      setStatus("ready");
+                      setEventMessage("Antwort bereit.");
+                      setAssistantAnswer(answer);
+
+                      getSettings()
+                        .then((latestSettings) => {
+                          if (latestSettings.ttsEnabled) {
+                            return speakText(answer).catch(() => undefined);
+                          }
+                          return undefined;
+                        })
+                        .catch(() => undefined);
+                    });
                 });
             })
             .catch((error: unknown) => {
@@ -266,8 +283,8 @@ function OverlayApp() {
           setEventMessage("Lese Auswahl und bereite Textvorschau vor...");
           setPendingReplacement(null);
 
-          readSelectedText()
-            .then((selectedText) =>
+          Promise.all([readSelectedText(), getSettings().catch(() => null)])
+            .then(([selectedText, appSettings]) =>
               askAssistant(
                 [
                   "Bearbeite den folgenden markierten Text gemaess Anweisung.",
@@ -276,9 +293,21 @@ function OverlayApp() {
                   "Markierter Text:",
                   selectedText,
                 ].join("\n\n"),
-              ).then((replacement) => ({ replacement })),
+              ).then((replacement) => ({ replacement, selectedText, appSettings })),
             )
-            .then(({ replacement }) => {
+            .then(({ replacement, selectedText, appSettings }) => {
+              const autoApply = appSettings?.editAutoApply ?? true;
+              if (!autoApply) {
+                setStatus("ready");
+                setEventMessage("Textvorschau bereit. Bitte Ersetzen oder Verwerfen waehlen.");
+                setPendingReplacement({
+                  original: selectedText,
+                  replacement,
+                  instruction: transcript,
+                });
+                return;
+              }
+
               if (!mounted) {
                 return;
               }
@@ -630,6 +659,7 @@ function SettingsWindow() {
   const [saveState, setSaveState] = useState("Bereit");
   const [saveStateKind, setSaveStateKind] = useState<SaveStateKind>("idle");
   const [updateState, setUpdateState] = useState("Nicht geprueft");
+  const [whisperDiag, setWhisperDiag] = useState<string>("");
   const settingsSections = [
     { id: "allgemein", label: "Allgemein" },
     { id: "hotkeys", label: "Hotkeys" },
@@ -661,6 +691,7 @@ function SettingsWindow() {
       })
       .catch(() => setSecretStatus({}));
     getHistoryRecent(25).then(setHistoryEntries).catch(() => setHistoryEntries([]));
+    getLocalWhisperDiagnostics().then((diag) => setWhisperDiag(diag.message)).catch(() => setWhisperDiag("Diagnose nicht verfuegbar"));
   }, []);
 
   useEffect(() => {
@@ -925,9 +956,27 @@ function SettingsWindow() {
                 <div className="provider-row">
                   <strong>Hinweis</strong>
                   <small>Kleinere Modelle und Beam-Size 1-2 sind schneller. Groessere Modelle und hoehere Beam-Size liefern meist bessere Transkripte, brauchen aber mehr Zeit.</small>
+                  <small>{whisperDiag}</small>
+                  <div className="replacement-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setWhisperDiag("Pruefe Runtime...");
+                        getLocalWhisperDiagnostics()
+                          .then((diag) => setWhisperDiag(diag.message))
+                          .catch((error: unknown) => setWhisperDiag(error instanceof Error ? error.message : String(error)));
+                      }}
+                    >
+                      Diagnose aktualisieren
+                    </button>
+                  </div>
                 </div>
               </>
             )}
+            <label>
+              <span>Edit-Modus: Direkt ersetzen</span>
+              <input type="checkbox" checked={settings.editAutoApply} onChange={(event) => updateSetting("editAutoApply", event.target.checked)} />
+            </label>
             <label>
               <span>Chat-Provider</span>
               <select value={settings.preferredChatProvider} onChange={(event) => updateSetting("preferredChatProvider", event.target.value)}>

@@ -32,6 +32,7 @@ export type AppSettings = {
   defaultLanguage: string;
   whisperModel: string;
   whisperBeamSize: number;
+  editAutoApply: boolean;
   punctuationCleanup: boolean;
   ttsEnabled: boolean;
   ttsVoice: string;
@@ -93,6 +94,14 @@ export type HistoryEntry = {
   outputText?: string | null;
   metadataJson?: string | null;
   success: boolean;
+};
+
+export type LocalWhisperDiagnostics = {
+  whisperAvailable: boolean;
+  ffmpegAvailable: boolean;
+  managedWhisperPath: string;
+  managedFfmpegPath: string;
+  message: string;
 };
 
 export async function getDesktopSessionType(): Promise<string> {
@@ -210,6 +219,7 @@ export async function getSettings(): Promise<AppSettings> {
       defaultLanguage: "de",
       whisperModel: "base",
       whisperBeamSize: 5,
+      editAutoApply: true,
       punctuationCleanup: false,
       ttsEnabled: false,
       ttsVoice: "piper-default",
@@ -339,6 +349,20 @@ export async function getHistoryRecent(limit = 50): Promise<HistoryEntry[]> {
   }
 
   return invoke<HistoryEntry[]>("history_recent", { limit });
+}
+
+export async function getLocalWhisperDiagnostics(): Promise<LocalWhisperDiagnostics> {
+  if (!isTauriRuntime()) {
+    return {
+      whisperAvailable: false,
+      ffmpegAvailable: false,
+      managedWhisperPath: "",
+      managedFfmpegPath: "",
+      message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+    };
+  }
+
+  return invoke<LocalWhisperDiagnostics>("get_local_whisper_diagnostics");
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {

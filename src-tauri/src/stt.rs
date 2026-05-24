@@ -5,13 +5,23 @@ use std::{
 };
 
 use reqwest::blocking::multipart;
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{history, secrets, settings};
 
 pub struct Transcript {
     pub text: String,
     pub provider: String,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LocalWhisperDiagnostics {
+    pub whisper_available: bool,
+    pub ffmpeg_available: bool,
+    pub managed_whisper_path: String,
+    pub managed_ffmpeg_path: String,
+    pub message: String,
 }
 
 #[derive(Deserialize)]
@@ -96,6 +106,31 @@ pub fn ensure_local_whisper_installed() -> Result<(), String> {
             last_error
         )
     })
+}
+
+pub fn local_whisper_diagnostics() -> LocalWhisperDiagnostics {
+    let whisper_path = whisper_venv_path().join("bin").join("whisper");
+    let ffmpeg_path = twokey_managed_bin_path("ffmpeg");
+    let whisper_available = command_exists("whisper-cli") || find_whisper_program().is_some();
+    let ffmpeg_available = find_ffmpeg_program().is_some();
+
+    let message = if whisper_available && ffmpeg_available {
+        "Lokal Whisper ist bereit.".to_string()
+    } else if !whisper_available && !ffmpeg_available {
+        "Weder Whisper noch ffmpeg sind bereit. Fuehre Runtime-Setup aus oder speichere local-whisper erneut.".to_string()
+    } else if !whisper_available {
+        "Whisper CLI fehlt. Runtime-Setup erforderlich.".to_string()
+    } else {
+        "ffmpeg fehlt. Runtime-Setup erforderlich.".to_string()
+    };
+
+    LocalWhisperDiagnostics {
+        whisper_available,
+        ffmpeg_available,
+        managed_whisper_path: whisper_path.to_string_lossy().to_string(),
+        managed_ffmpeg_path: ffmpeg_path.to_string_lossy().to_string(),
+        message,
+    }
 }
 
 fn transcribe_with_local_whisper(
