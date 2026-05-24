@@ -1,6 +1,6 @@
 [package]
 name = "twokey-ai"
-version = "1.0.18"
+version = "1.0.19"
 description = "TwoKey Linux AI Assistant"
 authors = ["TwoKey Contributors"]
 edition = "2021"
@@ -19,6 +19,6 @@ serde_json = "1"
 x11 = { version = "2.21.0", features = ["xlib"] }
 reqwest = { version = "0.12.24", features = ["blocking", "json", "multipart"] }
 base64 = "0.22"
-keyring = "3.6.3"
+keyring = { version = "3.6.3", features = ["linux-native-sync-persistent", "crypto-rust"] }
 rusqlite = { version = "0.32.1", features = ["bundled"] }
 sha2 = "0.10"

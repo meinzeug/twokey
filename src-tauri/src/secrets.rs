@@ -16,7 +16,17 @@ pub fn set_provider_api_key(provider_id: &str, api_key: &str) -> Result<(), Stri
         .map_err(|error| format!("Keyring-Eintrag konnte nicht erstellt werden: {error}"))?;
     entry
         .set_password(api_key)
-        .map_err(|error| format!("API-Key konnte nicht im Keyring gespeichert werden: {error}"))
+        .map_err(|error| format!("API-Key konnte nicht im Keyring gespeichert werden: {error}"))?;
+
+    let persisted = entry
+        .get_password()
+        .map_err(|error| format!("API-Key konnte nach dem Speichern nicht erneut gelesen werden: {error}"))?;
+
+    if persisted.trim().is_empty() {
+        return Err("API-Key konnte nicht persistent verifiziert werden".to_string());
+    }
+
+    Ok(())
 }
 
 pub fn clear_provider_api_key(provider_id: &str) -> Result<(), String> {
