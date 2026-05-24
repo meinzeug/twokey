@@ -99,14 +99,21 @@ fn installed_commands_snapshot() -> Vec<serde_json::Value> {
 
 fn pick_save_path() -> Result<PathBuf, String> {
     let default_name = format!("twokey-debug-{}.json", timestamp_compact());
+    let default_path = default_debug_path(&default_name);
 
     if command_exists("kdialog") {
         let output = Command::new("kdialog")
             .arg("--getsavefilename")
-            .arg(default_name)
+            .arg(default_path.to_string_lossy().to_string())
+            .arg("*.json|JSON files")
             .output()
             .map_err(|error| format!("kdialog konnte nicht gestartet werden: {error}"))?;
-        return path_from_output(output.stdout);
+
+        if output.status.success() {
+            if let Ok(path) = path_from_output(output.stdout) {
+                return Ok(path);
+            }
+        }
     }
 
     if command_exists("zenity") {
@@ -115,14 +122,32 @@ fn pick_save_path() -> Result<PathBuf, String> {
             .arg("--save")
             .arg("--confirm-overwrite")
             .arg("--filename")
-            .arg(&default_name)
+            .arg(default_path.to_string_lossy().to_string())
             .arg("--title=Debug-Datei speichern")
             .output()
             .map_err(|error| format!("zenity konnte nicht gestartet werden: {error}"))?;
-        return path_from_output(output.stdout);
+
+        if output.status.success() {
+            if let Ok(path) = path_from_output(output.stdout) {
+                return Ok(path);
+            }
+        }
     }
 
-    Err("Kein Dateidialog gefunden. Installiere kdialog oder zenity.".to_string())
+    // Last resort for headless/broken dialog environments: save into a predictable path.
+    Ok(default_path)
+}
+
+fn default_debug_path(file_name: &str) -> PathBuf {
+    if let Ok(home) = std::env::var("HOME") {
+        let downloads = PathBuf::from(&home).join("Downloads");
+        if downloads.is_dir() {
+            return downloads.join(file_name);
+        }
+        return PathBuf::from(home).join(file_name);
+    }
+
+    PathBuf::from(file_name)
 }
 
 fn command_exists(name: &str) -> bool {

@@ -540,6 +540,8 @@ print(text)
         .unwrap_or_default();
 
     let output = Command::new(&python)
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
         .arg("-c")
         .arg(python_script)
         .arg(if model_files.model.is_some() { "ctc" } else { "transducer" })
@@ -886,8 +888,8 @@ fn install_whisper_in_venv() -> Result<(), String> {
 
     let venv_python = venv_path.join("bin").join("python");
     let python = venv_python.to_string_lossy().to_string();
-    run_command(&python, &["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])?;
-    run_command(&python, &["-m", "pip", "install", "--upgrade", "openai-whisper"])?;
+    run_python_command(&python, &["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])?;
+    run_python_command(&python, &["-m", "pip", "install", "--upgrade", "openai-whisper"])?;
 
     let whisper = venv_path.join("bin").join("whisper");
     if !whisper.is_file() {
@@ -910,9 +912,34 @@ fn install_sherpa_in_venv() -> Result<(), String> {
     }
 
     let python = sherpa_venv_python_path().to_string_lossy().to_string();
-    run_command(&python, &["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])?;
-    run_command(&python, &["-m", "pip", "install", "--upgrade", "numpy", "click", "sherpa-onnx"])?;
+    run_python_command(&python, &["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])?;
+    run_python_command(&python, &["-m", "pip", "install", "--upgrade", "numpy", "click", "sherpa-onnx"])?;
     Ok(())
+}
+
+fn run_python_command(python: &str, args: &[&str]) -> Result<(), String> {
+    let output = Command::new(python)
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
+        .args(args)
+        .output()
+        .map_err(|error| format!("{python} konnte nicht gestartet werden: {error}"))?;
+
+    if output.status.success() {
+        return Ok(());
+    }
+
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let detail = if !stderr.is_empty() {
+        stderr
+    } else if !stdout.is_empty() {
+        stdout
+    } else {
+        format!("Exit-Code {}", output.status)
+    };
+
+    Err(detail)
 }
 
 fn ensure_sherpa_model_downloaded() -> Result<(), String> {
