@@ -16,6 +16,10 @@ const isRoot = typeof process.getuid === "function" && process.getuid() === 0;
 const sudoUser = process.env.SUDO_USER;
 
 if (isRoot && sudoUser && sudoUser !== "root") {
+  if (isDesktopRunningForUser(sudoUser)) {
+    process.exit(0);
+  }
+
   const uid = resolveUid(sudoUser);
   const homeDir = resolveHomeDir(sudoUser);
   const env = { ...process.env };
@@ -41,6 +45,10 @@ if (isRoot && sudoUser && sudoUser !== "root") {
   delegated.on("error", () => process.exit(0));
   delegated.on("close", () => process.exit(0));
 } else {
+  if (isDesktopRunningForUser(process.env.USER || "")) {
+    process.exit(0);
+  }
+
   const child = spawn(process.execPath, [cliPath, "--desktop", "--enable-autostart"], {
     stdio: "ignore",
     shell: false,
@@ -67,4 +75,13 @@ function resolveHomeDir(username) {
   const entry = String(out.stdout || "").trim();
   const parts = entry.split(":");
   return parts[5] || "";
+}
+
+function isDesktopRunningForUser(username) {
+  if (!username) {
+    return false;
+  }
+
+  const out = spawnSync("pgrep", ["-u", username, "-f", "twokey-ai(\\.AppImage)?"], { encoding: "utf8" });
+  return out.status === 0;
 }
