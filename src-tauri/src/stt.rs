@@ -36,8 +36,22 @@ pub struct SherpaOnnxDiagnostics {
     pub message: String,
 }
 
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VoskDiagnostics {
+    pub runtime_available: bool,
+    pub model_available: bool,
+    pub managed_venv_path: String,
+    pub managed_model_path: String,
+    pub message: String,
+}
+
 const SHERPA_MODEL_ARCHIVE_URL: &str = "https://github.com/k2-fsa/sherpa-onnx/releases/download/asr-models/sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8.tar.bz2";
 const SHERPA_MODEL_DIR_NAME: &str = "sherpa-onnx-nemo-parakeet-tdt-0.6b-v3-int8";
+const VOSK_MODEL_DE_URL: &str = "https://alphacephei.com/vosk/models/vosk-model-small-de-0.15.zip";
+const VOSK_MODEL_DE_DIR_NAME: &str = "vosk-model-small-de-0.15";
+const VOSK_MODEL_EN_URL: &str = "https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip";
+const VOSK_MODEL_EN_DIR_NAME: &str = "vosk-model-small-en-us-0.15";
 
 #[derive(Deserialize)]
 struct OpenAITranscriptionResponse {
@@ -60,6 +74,7 @@ pub fn transcribe(audio_path: &Path) -> Result<Transcript, String> {
         }
         "openai-compatible" => transcribe_with_openai_compatible(audio_path),
         "sherpa-onnx" => transcribe_with_sherpa_onnx(audio_path, &app_settings.default_language),
+        "vosk" => transcribe_with_vosk(audio_path, &app_settings.default_language),
         _ => {
             if let Ok(command_template) = std::env::var("TWOKEY_STT_COMMAND") {
                 transcribe_with_command(audio_path, &command_template)
@@ -80,6 +95,68 @@ pub fn transcribe(audio_path: &Path) -> Result<Transcript, String> {
     });
 
     result
+}
+
+pub fn ensure_vosk_installed() -> Result<(), String> {
+    if !command_exists("python3") {
+        return Err("python3 wurde nicht gefunden. Vosk benoetigt eine Python-Runtime.".to_string());
+    }
+
+    install_vosk_in_venv()
+}
+
+pub fn ensure_vosk_runtime(sudo_password: Option<&str>, language: &str) -> Result<String, String> {
+    ensure_vosk_system_dependencies(sudo_password)?;
+    ensure_vosk_installed()?;
+    ensure_vosk_model_downloaded(language)?;
+    Ok("Vosk Runtime und Modell sind bereit.".to_string())
+}
+
+fn ensure_vosk_system_dependencies(sudo_password: Option<&str>) -> Result<(), String> {
+    if command_exists("python3") {
+        return Ok(());
+    }
+
+    if !command_exists("apt-get") {
+        return Err("python3 fehlt und apt-get ist nicht verfuegbar. Bitte installiere python3, python3-venv und python3-pip manuell.".to_string());
+    }
+
+    run_privileged_command(
+        "apt-get",
+        &["install", "-y", "python3", "python3-venv", "python3-pip"],
+        sudo_password,
+    )?;
+
+    if !command_exists("python3") {
+        return Err("python3 konnte nach der Installation nicht verifiziert werden.".to_string());
+    }
+
+    Ok(())
+}
+
+pub fn vosk_diagnostics(language: &str) -> VoskDiagnostics {
+    let venv_python = vosk_venv_python_path();
+    let model_dir = vosk_model_dir_path(language);
+    let runtime_available = venv_python.is_file();
+    let model_available = vosk_model_files_available(&model_dir);
+
+    let message = if runtime_available && model_available {
+        "Vosk ist bereit.".to_string()
+    } else if !runtime_available && !model_available {
+        "Weder Vosk Runtime noch Modell sind bereit. Fuehre Runtime-Setup aus.".to_string()
+    } else if !runtime_available {
+        "Vosk Runtime fehlt. Runtime-Setup erforderlich.".to_string()
+    } else {
+        "Vosk Modell fehlt. Runtime-Setup erforderlich.".to_string()
+    };
+
+    VoskDiagnostics {
+        runtime_available,
+        model_available,
+        managed_venv_path: vosk_venv_path().to_string_lossy().to_string(),
+        managed_model_path: model_dir.to_string_lossy().to_string(),
+        message,
+    }
 }
 
 pub fn ensure_sherpa_onnx_installed() -> Result<(), String> {
@@ -583,6 +660,107 @@ print(text)
     })
 }
 
+fn transcribe_with_vosk(audio_path: &Path, language: &str) -> Result<Transcript, String> {
+    ensure_vosk_runtime(None, language)?;
+
+    if !audio_path.is_file() {
+        return Err(format!(
+            "Audiodatei fuer Transkription wurde nicht gefunden: {}",
+            audio_path.to_string_lossy()
+        ));
+    }
+
+    let clip_duration = estimate_audio_duration_secs(audio_path);
+    if clip_duration.is_some_and(|duration| duration < 0.9) {
+        return Err("Aufnahme zu kurz fuer verlaessliche Transkription. Bitte Hotkey laenger halten und den Satz komplett sprechen.".to_string());
+    }
+
+    let model_dir = vosk_model_dir_path(language);
+    if !vosk_model_files_available(&model_dir) {
+        return Err("Vosk Modell-Dateien wurden nicht gefunden. Fuehre Runtime-Setup erneut aus.".to_string());
+    }
+
+    let python = vosk_venv_python_path();
+    if !python.is_file() {
+        return Err("Vosk Python-Runtime fehlt. Fuehre Runtime-Setup erneut aus.".to_string());
+    }
+
+    let python_script = r#"
+import json
+import sys
+import wave
+from vosk import Model, KaldiRecognizer
+
+model_path = sys.argv[1]
+audio_path = sys.argv[2]
+
+with wave.open(audio_path, "rb") as wf:
+    channels = wf.getnchannels()
+    sample_width = wf.getsampwidth()
+    sample_rate = wf.getframerate()
+
+    if channels != 1:
+        raise RuntimeError("Unsupported WAV channel count. Expected mono audio.")
+    if sample_width != 2:
+        raise RuntimeError("Unsupported WAV sample width. Expected 16-bit PCM.")
+
+    recognizer = KaldiRecognizer(Model(model_path), sample_rate)
+    parts = []
+
+    while True:
+        data = wf.readframes(4000)
+        if not data:
+            break
+        if recognizer.AcceptWaveform(data):
+            text = json.loads(recognizer.Result()).get("text", "").strip()
+            if text:
+                parts.append(text)
+
+    final_text = json.loads(recognizer.FinalResult()).get("text", "").strip()
+    if final_text:
+        parts.append(final_text)
+
+print(" ".join(parts).strip())
+"#;
+
+    let output = Command::new(&python)
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
+        .arg("-c")
+        .arg(python_script)
+        .arg(model_dir.to_string_lossy().to_string())
+        .arg(audio_path)
+        .output()
+        .map_err(|error| format!("Vosk konnte nicht gestartet werden: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("Exit-Code {}", output.status)
+        };
+
+        return Err(format!("Vosk Transkription fehlgeschlagen: {detail}"));
+    }
+
+    let text = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    if text.is_empty() {
+        return Ok(Transcript {
+            text: "Keine Sprache erkannt.".to_string(),
+            provider: "vosk".to_string(),
+        });
+    }
+
+    Ok(Transcript {
+        text: sanitize_transcript(&text),
+        provider: "vosk".to_string(),
+    })
+}
+
 fn unique_whisper_output_dir() -> PathBuf {
     let ts = SystemTime::now()
         .duration_since(UNIX_EPOCH)
@@ -790,6 +968,62 @@ fn sherpa_models_root_path() -> PathBuf {
     PathBuf::from(".twokey-models")
 }
 
+fn vosk_venv_path() -> PathBuf {
+    if let Ok(home) = env::var("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("twokey")
+            .join("vosk-venv");
+    }
+
+    PathBuf::from(".twokey-vosk-venv")
+}
+
+fn vosk_venv_python_path() -> PathBuf {
+    vosk_venv_path().join("bin").join("python")
+}
+
+fn vosk_models_root_path() -> PathBuf {
+    if let Ok(home) = env::var("HOME") {
+        return PathBuf::from(home)
+            .join(".local")
+            .join("share")
+            .join("twokey")
+            .join("models");
+    }
+
+    PathBuf::from(".twokey-models")
+}
+
+struct VoskModelSpec {
+    url: &'static str,
+    dir_name: &'static str,
+}
+
+fn vosk_model_spec(language: &str) -> VoskModelSpec {
+    if language.eq_ignore_ascii_case("de") {
+        return VoskModelSpec {
+            url: VOSK_MODEL_DE_URL,
+            dir_name: VOSK_MODEL_DE_DIR_NAME,
+        };
+    }
+
+    VoskModelSpec {
+        url: VOSK_MODEL_EN_URL,
+        dir_name: VOSK_MODEL_EN_DIR_NAME,
+    }
+}
+
+fn vosk_model_dir_path(language: &str) -> PathBuf {
+    let spec = vosk_model_spec(language);
+    vosk_models_root_path().join(spec.dir_name)
+}
+
+fn vosk_model_files_available(model_dir: &Path) -> bool {
+    model_dir.join("am").join("final.mdl").is_file() && model_dir.join("conf").join("model.conf").is_file()
+}
+
 fn sherpa_model_dir_path() -> PathBuf {
     sherpa_models_root_path().join(SHERPA_MODEL_DIR_NAME)
 }
@@ -917,6 +1151,24 @@ fn install_sherpa_in_venv() -> Result<(), String> {
     Ok(())
 }
 
+fn install_vosk_in_venv() -> Result<(), String> {
+    let venv_path = vosk_venv_path();
+    if let Some(parent) = venv_path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Vosk-Verzeichnis konnte nicht angelegt werden: {error}"))?;
+    }
+
+    if !venv_path.join("bin").join("python").is_file() {
+        let venv = venv_path.to_string_lossy().to_string();
+        run_command("python3", &["-m", "venv", &venv])?;
+    }
+
+    let python = vosk_venv_python_path().to_string_lossy().to_string();
+    run_python_command(&python, &["-m", "pip", "install", "--upgrade", "pip", "setuptools", "wheel"])?;
+    run_python_command(&python, &["-m", "pip", "install", "--upgrade", "vosk"])?;
+    Ok(())
+}
+
 fn run_python_command(python: &str, args: &[&str]) -> Result<(), String> {
     let output = Command::new(python)
         .env_remove("PYTHONHOME")
@@ -989,6 +1241,73 @@ fn ensure_sherpa_model_downloaded() -> Result<(), String> {
 
     if sherpa_model_files(&model_dir).is_none() {
         return Err("sherpa-onnx Modell wurde entpackt, aber benoetigte Dateien fehlen (tokens.txt plus model.onnx oder encoder/decoder/joiner.onnx).".to_string());
+    }
+
+    Ok(())
+}
+
+fn ensure_vosk_model_downloaded(language: &str) -> Result<(), String> {
+    let spec = vosk_model_spec(language);
+    let model_dir = vosk_model_dir_path(language);
+    if vosk_model_files_available(&model_dir) {
+        return Ok(());
+    }
+
+    let models_root = vosk_models_root_path();
+    fs::create_dir_all(&models_root)
+        .map_err(|error| format!("Vosk-Modell-Verzeichnis konnte nicht erstellt werden: {error}"))?;
+
+    let archive_name = spec
+        .url
+        .rsplit('/')
+        .next()
+        .ok_or_else(|| "Ungueltige Vosk Modell-URL".to_string())?;
+    let archive_path = models_root.join(archive_name);
+
+    if !archive_path.is_file() {
+        let mut response = reqwest::blocking::get(spec.url)
+            .map_err(|error| format!("Vosk Modell konnte nicht heruntergeladen werden: {error}"))?;
+
+        if !response.status().is_success() {
+            return Err(format!(
+                "Vosk Modell konnte nicht heruntergeladen werden (HTTP {})",
+                response.status()
+            ));
+        }
+
+        let mut file = fs::File::create(&archive_path)
+            .map_err(|error| format!("Vosk Modell-Archiv konnte nicht gespeichert werden: {error}"))?;
+        std::io::copy(&mut response, &mut file)
+            .map_err(|error| format!("Vosk Modell-Archiv konnte nicht geschrieben werden: {error}"))?;
+    }
+
+    let output = Command::new("python3")
+        .env_remove("PYTHONHOME")
+        .env_remove("PYTHONPATH")
+        .arg("-c")
+        .arg(
+            "import pathlib, sys, zipfile\narchive=pathlib.Path(sys.argv[1])\nroot=pathlib.Path(sys.argv[2])\nwith zipfile.ZipFile(archive, 'r') as zf:\n    zf.extractall(root)",
+        )
+        .arg(&archive_path)
+        .arg(&models_root)
+        .output()
+        .map_err(|error| format!("python3 konnte nicht gestartet werden: {error}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("Exit-Code {}", output.status)
+        };
+        return Err(format!("Vosk Modell konnte nicht entpackt werden: {detail}"));
+    }
+
+    if !vosk_model_files_available(&model_dir) {
+        return Err("Vosk Modell wurde entpackt, aber benoetigte Dateien fehlen (am/final.mdl und conf/model.conf).".to_string());
     }
 
     Ok(())
@@ -1204,4 +1523,81 @@ fn command_exists(name: &str) -> bool {
         .status()
         .map(|status| status.success())
         .unwrap_or(false)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn write_silence_wav(path: &Path, sample_rate: u32, duration_secs: f32) -> Result<(), String> {
+        let samples = (sample_rate as f32 * duration_secs) as u32;
+        let bytes_per_sample = 2u32;
+        let data_size = samples * bytes_per_sample;
+        let riff_chunk_size = 36 + data_size;
+
+        let mut file = fs::File::create(path)
+            .map_err(|error| format!("Test-WAV konnte nicht erstellt werden: {error}"))?;
+
+        file.write_all(b"RIFF")
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&riff_chunk_size.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(b"WAVEfmt ")
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&16u32.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&1u16.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&1u16.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&sample_rate.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        let byte_rate = sample_rate * bytes_per_sample;
+        file.write_all(&byte_rate.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&(bytes_per_sample as u16).to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&16u16.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(b"data")
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+        file.write_all(&data_size.to_le_bytes())
+            .map_err(|error| format!("WAV-Header konnte nicht geschrieben werden: {error}"))?;
+
+        let silence = vec![0u8; data_size as usize];
+        file.write_all(&silence)
+            .map_err(|error| format!("WAV-Daten konnten nicht geschrieben werden: {error}"))?;
+
+        Ok(())
+    }
+
+    #[test]
+    #[ignore = "Downloads runtime assets and executes local Python STT backends"]
+    fn stt_local_vosk_runtime_and_transcribe_smoke() {
+        ensure_vosk_runtime(None, "de").expect("Vosk runtime setup failed");
+
+        let wav_path = env::temp_dir().join("twokey-vosk-smoke.wav");
+        write_silence_wav(&wav_path, 16_000, 1.5).expect("failed to create wav");
+
+        let result = transcribe_with_vosk(&wav_path, "de").expect("Vosk transcription failed");
+        assert!(
+            !result.provider.trim().is_empty(),
+            "provider should be set after Vosk transcription"
+        );
+    }
+
+    #[test]
+    #[ignore = "Downloads runtime assets and executes local Python STT backends"]
+    fn stt_local_sherpa_runtime_and_transcribe_smoke() {
+        ensure_sherpa_onnx_runtime(None).expect("sherpa runtime setup failed");
+
+        let wav_path = env::temp_dir().join("twokey-sherpa-smoke.wav");
+        write_silence_wav(&wav_path, 16_000, 1.5).expect("failed to create wav");
+
+        let result = transcribe_with_sherpa_onnx(&wav_path, "de").expect("sherpa transcription failed");
+        assert!(
+            !result.provider.trim().is_empty(),
+            "provider should be set after sherpa transcription"
+        );
+    }
 }

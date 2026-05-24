@@ -21,10 +21,12 @@ import {
   getDesktopCapabilities,
   getLocalWhisperDiagnostics,
   getSherpaOnnxDiagnostics,
+  getVoskDiagnostics,
   getTtsBackendStatus,
   getRuntimeDiagnostics,
   ensureLocalWhisperRuntime,
   ensureSherpaOnnxRuntime,
+  ensureVoskRuntime,
   exportDebugReport,
   getSettings,
   dryRunToolchainById,
@@ -64,6 +66,7 @@ import {
   type SecretStatus,
   type Toolchain,
   type ToolchainDryRun,
+  type VoskDiagnostics,
 } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
@@ -710,6 +713,7 @@ function SettingsWindow() {
   const [toolchainDryRunResult, setToolchainDryRunResult] = useState<ToolchainDryRun | null>(null);
   const [whisperDiag, setWhisperDiag] = useState<LocalWhisperDiagnostics | null>(null);
   const [sherpaDiag, setSherpaDiag] = useState<SherpaOnnxDiagnostics | null>(null);
+  const [voskDiag, setVoskDiag] = useState<VoskDiagnostics | null>(null);
   const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiagnostics | null>(null);
   const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModelInfo[]>([]);
   const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
@@ -750,6 +754,7 @@ function SettingsWindow() {
     getHistoryRecent(25).then(setHistoryEntries).catch(() => setHistoryEntries([]));
     getLocalWhisperDiagnostics().then(setWhisperDiag).catch(() => setWhisperDiag(null));
     getSherpaOnnxDiagnostics().then(setSherpaDiag).catch(() => setSherpaDiag(null));
+    getVoskDiagnostics().then(setVoskDiag).catch(() => setVoskDiag(null));
     getRuntimeDiagnostics().then(setRuntimeDiag).catch(() => setRuntimeDiag(null));
     listToolchains().then(setToolchains).catch(() => setToolchains([]));
   }, []);
@@ -825,12 +830,16 @@ function SettingsWindow() {
       warnings.push("sherpa-onnx ist unvollstaendig eingerichtet. Fuehre Runtime-Setup aus.");
     }
 
+    if (settings.sttProvider === "vosk" && voskDiag && (!voskDiag.runtimeAvailable || !voskDiag.modelAvailable)) {
+      warnings.push("Vosk ist unvollstaendig eingerichtet. Fuehre Runtime-Setup aus.");
+    }
+
     if (settings.ttsEnabled && runtimeDiag && !runtimeDiag.tts.available) {
       warnings.push("TTS ist aktiviert, aber kein TTS-Backend wurde gefunden.");
     }
 
     return warnings;
-  }, [settings, providers, secretStatus, whisperDiag, sherpaDiag, runtimeDiag]);
+  }, [settings, providers, secretStatus, whisperDiag, sherpaDiag, voskDiag, runtimeDiag]);
 
   const openRouterFilteredModels = useMemo(() => {
     if (!settings) {
@@ -847,11 +856,12 @@ function SettingsWindow() {
   const refreshRuntimeDiagnostics = () => {
     setSaveState("Aktualisiere Diagnose...");
     setSaveStateKind("saving");
-    Promise.all([getRuntimeDiagnostics(), getLocalWhisperDiagnostics(), getSherpaOnnxDiagnostics(), getHistoryRecent(25)])
-      .then(([diag, whisper, sherpa, recent]) => {
+    Promise.all([getRuntimeDiagnostics(), getLocalWhisperDiagnostics(), getSherpaOnnxDiagnostics(), getVoskDiagnostics(), getHistoryRecent(25)])
+      .then(([diag, whisper, sherpa, vosk, recent]) => {
         setRuntimeDiag(diag);
         setWhisperDiag(whisper);
         setSherpaDiag(sherpa);
+        setVoskDiag(vosk);
         setHistoryEntries(recent);
         setSaveState("Diagnose aktualisiert");
         setSaveStateKind("success");
@@ -1111,6 +1121,60 @@ function SettingsWindow() {
       return;
     }
 
+    if (key === "sttProvider" && value === "vosk") {
+      setSaveState("Pruefe Vosk Runtime...");
+      setSaveStateKind("saving");
+      getVoskDiagnostics()
+        .then((diag) => {
+          setVoskDiag(diag);
+
+          const nextSettings = { ...settings, [key]: value };
+          if (diag.runtimeAvailable && diag.modelAvailable) {
+            setSettings(nextSettings);
+            setSaveState("Speichere Vosk...");
+            setSaveStateKind("saving");
+            return saveSettings(nextSettings)
+              .then(() => refreshRuntimeDiagnostics())
+              .then(() => {
+                setSaveState("Gespeichert, Vosk war bereits installiert");
+                setSaveStateKind("success");
+              });
+          }
+
+          const shouldInstall = window.confirm("Vosk wurde ausgewaehlt. Soll Runtime und Modell jetzt vorbereitet werden?");
+          if (!shouldInstall) {
+            throw new Error("Vosk-Setup abgebrochen");
+          }
+
+          const sudoPassword = window.prompt("Optional: sudo-Passwort eingeben, falls System-Abhaengigkeiten installiert werden muessen:");
+          if (sudoPassword === null) {
+            throw new Error("Vosk-Setup abgebrochen");
+          }
+
+          setSaveState("Installiere Vosk Runtime...");
+          setSaveStateKind("installing");
+          return ensureVoskRuntime(sudoPassword)
+            .then((message) => {
+              setSaveState(message);
+              setSaveStateKind("success");
+              setSettings(nextSettings);
+              setSaveState("Speichere Vosk...");
+              setSaveStateKind("saving");
+              return saveSettings(nextSettings).then(() => refreshRuntimeDiagnostics());
+            })
+            .then(() => {
+              setSaveState("Gespeichert, Vosk installiert");
+              setSaveStateKind("success");
+            });
+        })
+        .catch((error: unknown) => {
+          setSaveState(error instanceof Error ? error.message : String(error));
+          setSaveStateKind("error");
+        });
+
+      return;
+    }
+
     if (key === "ttsBackend" && value !== "auto") {
       const selectedBackend = String(value);
       getTtsBackendStatus(selectedBackend)
@@ -1353,6 +1417,7 @@ function SettingsWindow() {
                 <option value="external-command">Externer Befehl</option>
                 <option value="local-whisper">Lokal Whisper</option>
                 <option value="sherpa-onnx">Sherpa ONNX</option>
+                <option value="vosk">Vosk</option>
                 <option value="openai-compatible">OpenAI-kompatibel</option>
               </select>
             </label>
@@ -1431,6 +1496,36 @@ function SettingsWindow() {
                           .then((diag) => {
                             setSherpaDiag(diag);
                             setSaveState("sherpa-onnx-Diagnose aktualisiert");
+                            setSaveStateKind("success");
+                          })
+                          .catch((error: unknown) => {
+                            setSaveState(error instanceof Error ? error.message : String(error));
+                            setSaveStateKind("error");
+                          });
+                      }}
+                    >
+                      Diagnose aktualisieren
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+            {settings.sttProvider === "vosk" && (
+              <>
+                <div className="provider-row">
+                  <small>Nutze ein lokales Vosk Modell (offline) fuer schnelle CPU-Transkription.</small>
+                  <small>{voskDiag?.message ?? "Diagnose nicht verfuegbar"}</small>
+                  <small>Vosk Runtime: {voskDiag?.runtimeAvailable ? "bereit" : "fehlt"} | Modell: {voskDiag?.modelAvailable ? "bereit" : "fehlt"}</small>
+                  <div className="replacement-actions">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSaveState("Pruefe Vosk Runtime...");
+                        setSaveStateKind("saving");
+                        getVoskDiagnostics()
+                          .then((diag) => {
+                            setVoskDiag(diag);
+                            setSaveState("Vosk-Diagnose aktualisiert");
                             setSaveStateKind("success");
                           })
                           .catch((error: unknown) => {
@@ -1688,6 +1783,8 @@ function SettingsWindow() {
               <div className="provider-row">
                 <strong>STT/TTS Runtime</strong>
                 <small>{runtimeDiag?.whisper.message ?? "Whisper-Diagnose nicht verfuegbar"}</small>
+                <small>{runtimeDiag?.sherpa.message ?? "sherpa-onnx Diagnose nicht verfuegbar"}</small>
+                <small>{runtimeDiag?.vosk.message ?? "Vosk-Diagnose nicht verfuegbar"}</small>
                 <small>{runtimeDiag?.tts.message ?? "TTS-Diagnose nicht verfuegbar"}</small>
                 <small>Gewaehltes TTS-Backend: {settings.ttsBackend}</small>
                 <small>Aktives STT-Setting: {runtimeDiag?.sttProvider ?? "unknown"}</small>

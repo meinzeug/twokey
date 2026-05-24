@@ -125,6 +125,14 @@ export type SherpaOnnxDiagnostics = {
   message: string;
 };
 
+export type VoskDiagnostics = {
+  runtimeAvailable: boolean;
+  modelAvailable: boolean;
+  managedVenvPath: string;
+  managedModelPath: string;
+  message: string;
+};
+
 export type ToolchainStep = {
   kind: string;
   value: string;
@@ -149,6 +157,7 @@ export type RuntimeDiagnostics = {
   desktop: DesktopCapabilities;
   whisper: LocalWhisperDiagnostics;
   sherpa: SherpaOnnxDiagnostics;
+  vosk: VoskDiagnostics;
   tts: {
     backend: string;
     available: boolean;
@@ -533,6 +542,28 @@ export async function ensureSherpaOnnxRuntime(sudoPassword?: string | null): Pro
   return invoke<string>("ensure_sherpa_onnx_runtime", { sudoPassword: sudoPassword ?? null });
 }
 
+export async function getVoskDiagnostics(): Promise<VoskDiagnostics> {
+  if (!isTauriRuntime()) {
+    return {
+      runtimeAvailable: false,
+      modelAvailable: false,
+      managedVenvPath: "",
+      managedModelPath: "",
+      message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+    };
+  }
+
+  return invoke<VoskDiagnostics>("get_vosk_diagnostics");
+}
+
+export async function ensureVoskRuntime(sudoPassword?: string | null): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keine Vosk Runtime installieren.");
+  }
+
+  return invoke<string>("ensure_vosk_runtime", { sudoPassword: sudoPassword ?? null });
+}
+
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
   if (!isTauriRuntime()) {
     return {
@@ -551,6 +582,13 @@ export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {
         message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
       },
       sherpa: {
+        runtimeAvailable: false,
+        modelAvailable: false,
+        managedVenvPath: "",
+        managedModelPath: "",
+        message: "Browser-Vorschau verfuegbar, keine Runtime-Diagnose.",
+      },
+      vosk: {
         runtimeAvailable: false,
         modelAvailable: false,
         managedVenvPath: "",

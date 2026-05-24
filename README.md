@@ -180,12 +180,14 @@ Configured in settings (`sttProvider`):
 
 - `mock`
 - `local-whisper`
+- `sherpa-onnx`
+- `vosk`
 - `external-command`
 - `openai-compatible`
 
 `external-command` needs `TWOKEY_STT_COMMAND` with `{audio}` placeholder.
 
-For `local-whisper`, TwoKey attempts runtime setup in user space and checks required binaries before transcription.
+For `local-whisper`, `sherpa-onnx`, and `vosk`, TwoKey attempts runtime/model setup in user space and checks required binaries before transcription.
 
 Example:
 
