@@ -19,6 +19,8 @@ The core idea matches the video workflow:
 - Double-tap hotkey to cycle modes.
 - Single-tap hotkey to open file-context picker.
 - Voice-triggered toolchains for multi-step desktop actions.
+- Visual toolchain editor in settings with dry-run and manual execution controls.
+- Toolchain safety guardrails (dangerous shell pattern blocking).
 - Four modes:
   - Conversation
   - Edit Text
@@ -47,6 +49,7 @@ The core idea matches the video workflow:
 - Tray icon and settings window.
 - GitHub release check from settings.
 - In-app AppImage update download and launch.
+- Optional in-app background update download to staged AppImage file.
 - Local Whisper auto-setup on first use:
   - managed `ffmpeg` in `~/.local/share/twokey/bin/`
   - managed Whisper venv in `~/.local/share/twokey/whisper-venv/`
@@ -72,6 +75,14 @@ Still not fully equivalent to the video vision:
 - Toolchains have a visual settings editor; richer action templates and safety controls are still pending.
 - Wayland still has compositor-specific limits for global hold hotkeys and full automation.
 - Update install is AppImage-first with channel-aware checks (`stable`/`beta`/`dev`), checksum validation and local rollback fallback.
+
+Current workflow action catalog:
+
+- `open_url`
+- `open_app`
+- `shell` (with safety blocking for known dangerous patterns)
+- `wait_ms`
+- `check_command`
 
 ## Install
 

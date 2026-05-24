@@ -14,6 +14,7 @@
 - Conversation mode with provider routing.
 - Toolchain trigger execution from spoken transcript.
 - Visual toolchain editor in settings with persistent create/edit/delete flow.
+- Toolchain dry-run and manual execution controls with safety guardrails.
 - Direct edit/replace flow for selected text.
 - Dictation insertion flow.
 - Feedback capture and persistence.
@@ -37,7 +38,7 @@
 
 ## In Progress
 
-- Expand runtime tests from smoke checks to real interaction E2E scenarios.
+- Expand runtime tests from interaction E2E to compositor-native real-session E2E.
 - Signed updater pipeline and rollback-ready install flow design.
 
 ## Planned
@@ -46,6 +47,11 @@
 
 - Richer action catalog (window placement, sequence timing, app state checks).
 - Workflow safety controls (dry-run/validation/permission prompts).
+
+Delivered baseline:
+- `wait_ms` and `check_command` steps.
+- dangerous shell pattern blocking.
+- Dry-run preview + manual execution confirmation from settings.
 
 ### Platform Hardening
 
@@ -61,9 +67,13 @@
 - Optional background update download.
 - Staged rollout by channel/cohort marker in release notes.
 
+Delivered baseline:
+- Background update download to staged AppImage path with checksum verification.
+
 ### Quality
 
 - Integration tests for end-to-end voice pipeline.
 - Snapshot/regression tests for settings and overlay interactions.
 - CI validation workflow for TypeScript + Rust checks.
 - Reproducible runtime smoke tests for X11 and Wayland in CI session matrix.
+- Interaction-level toolchain E2E tests in CI.

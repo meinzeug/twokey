@@ -92,3 +92,7 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml runtime_e2e -- --nocapture
         env:
           TWOKEY_E2E_SESSION: ${{ matrix.session }}
+
+      - name: Run toolchain interaction E2E tests
+        run: |
+          cargo test --manifest-path src-tauri/Cargo.toml --test toolchain_interaction_e2e -- --nocapture

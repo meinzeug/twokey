@@ -117,6 +117,14 @@ export type Toolchain = {
   steps: ToolchainStep[];
 };
 
+export type ToolchainDryRun = {
+  toolchainId: string;
+  toolchainName: string;
+  executable: boolean;
+  steps: string[];
+  warnings: string[];
+};
+
 export type RuntimeDiagnostics = {
   desktop: DesktopCapabilities;
   whisper: LocalWhisperDiagnostics;
@@ -322,12 +330,42 @@ export async function installLatestUpdate(): Promise<string> {
   return invoke<string>("install_latest_update");
 }
 
+export async function downloadLatestUpdateBackground(): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann kein Hintergrund-Update laden.");
+  }
+
+  return invoke<string>("download_latest_update_background");
+}
+
 export async function runToolchainFromText(text: string): Promise<string | null> {
   if (!isTauriRuntime()) {
     return null;
   }
 
   return invoke<string | null>("run_toolchain_from_text", { text });
+}
+
+export async function runToolchainById(id: string): Promise<string> {
+  if (!isTauriRuntime()) {
+    return "Browser-Vorschau: Toolchain-Ausfuehrung nicht verfuegbar.";
+  }
+
+  return invoke<string>("run_toolchain_by_id", { id });
+}
+
+export async function dryRunToolchainById(id: string): Promise<ToolchainDryRun> {
+  if (!isTauriRuntime()) {
+    return {
+      toolchainId: id,
+      toolchainName: "Browser-Vorschau",
+      executable: false,
+      steps: [],
+      warnings: ["Browser-Vorschau: Dry-Run nicht verfuegbar."],
+    };
+  }
+
+  return invoke<ToolchainDryRun>("dry_run_toolchain_by_id", { id });
 }
 
 export async function listToolchains(): Promise<Toolchain[]> {

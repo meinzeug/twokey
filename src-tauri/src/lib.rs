@@ -18,7 +18,7 @@ mod secrets;
 mod session;
 mod settings;
 mod stt;
-mod toolchains;
+pub mod toolchains;
 mod tray;
 mod tts;
 mod updater;
@@ -203,6 +203,11 @@ fn install_latest_update() -> Result<String, String> {
 }
 
 #[tauri::command]
+fn download_latest_update_background() -> Result<String, String> {
+    updater::download_latest_appimage_background()
+}
+
+#[tauri::command]
 fn submit_feedback(text: String) -> Result<String, String> {
     history::record(history::AuditEvent {
         kind: "feedback".to_string(),
@@ -220,6 +225,16 @@ fn submit_feedback(text: String) -> Result<String, String> {
 #[tauri::command]
 fn run_toolchain_from_text(text: String) -> Result<Option<String>, String> {
     toolchains::run_for_transcript(&text)
+}
+
+#[tauri::command]
+fn run_toolchain_by_id(id: String) -> Result<String, String> {
+    toolchains::run_by_id(&id)
+}
+
+#[tauri::command]
+fn dry_run_toolchain_by_id(id: String) -> Result<toolchains::ToolchainDryRun, String> {
+    toolchains::dry_run_by_id(&id)
 }
 
 #[tauri::command]
@@ -349,6 +364,7 @@ pub fn run() {
             ask_ollama,
             clear_provider_api_key,
             check_for_updates,
+            download_latest_update_background,
             install_latest_update,
             get_desktop_capabilities,
             get_desktop_session_type,
@@ -365,6 +381,8 @@ pub fn run() {
             replace_selected_text,
             save_settings,
             save_toolchains,
+            run_toolchain_by_id,
+            dry_run_toolchain_by_id,
             run_toolchain_from_text,
             start_manual_capture,
             stop_manual_capture,

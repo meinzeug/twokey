@@ -22,6 +22,8 @@ import {
   getLocalWhisperDiagnostics,
   getRuntimeDiagnostics,
   getSettings,
+  dryRunToolchainById,
+  downloadLatestUpdateBackground,
   installLatestUpdate,
   insertText,
   listToolchains,
@@ -31,6 +33,7 @@ import {
   providerApiKeyStatus,
   readSelectedText,
   replaceSelectedText,
+  runToolchainById,
   runToolchainFromText,
   saveToolchains,
   saveSettings,
@@ -51,6 +54,7 @@ import {
   type RuntimeDiagnostics,
   type SecretStatus,
   type Toolchain,
+  type ToolchainDryRun,
 } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
@@ -675,6 +679,7 @@ function SettingsWindow() {
   const [saveState, setSaveState] = useState("Bereit");
   const [saveStateKind, setSaveStateKind] = useState<SaveStateKind>("idle");
   const [updateState, setUpdateState] = useState("Nicht geprueft");
+  const [toolchainDryRunResult, setToolchainDryRunResult] = useState<ToolchainDryRun | null>(null);
   const [whisperDiag, setWhisperDiag] = useState<LocalWhisperDiagnostics | null>(null);
   const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiagnostics | null>(null);
   const settingsSections = [
@@ -867,6 +872,41 @@ function SettingsWindow() {
       return { ...chain, steps: remainingSteps.length ? remainingSteps : [{ kind: "shell", value: "echo \"step\"" }] };
     });
     persistToolchains(next);
+  };
+
+  const runToolchainDryRun = (chain: Toolchain) => {
+    setSaveState(`Dry-Run fuer ${chain.name}...`);
+    setSaveStateKind("saving");
+    dryRunToolchainById(chain.id)
+      .then((result) => {
+        setToolchainDryRunResult(result);
+        setSaveState(result.executable ? "Dry-Run erfolgreich" : "Dry-Run mit Warnungen");
+        setSaveStateKind(result.executable ? "success" : "error");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
+  };
+
+  const runToolchainNow = (chain: Toolchain) => {
+    const proceed = window.confirm(`Toolchain jetzt ausfuehren?\n\n${chain.name} (${chain.id})`);
+    if (!proceed) {
+      return;
+    }
+
+    setSaveState(`Fuehre ${chain.name} aus...`);
+    setSaveStateKind("saving");
+    runToolchainById(chain.id)
+      .then((message) => {
+        setSaveState(message);
+        setSaveStateKind("success");
+        setToolchainDryRunResult(null);
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      });
   };
 
   const updateSetting = <Key extends keyof AppSettings>(key: Key, value: AppSettings[Key]) => {
@@ -1265,6 +1305,8 @@ function SettingsWindow() {
                         <option value="open_url">open_url</option>
                         <option value="open_app">open_app</option>
                         <option value="shell">shell</option>
+                        <option value="wait_ms">wait_ms</option>
+                        <option value="check_command">check_command</option>
                       </select>
                       <input
                         value={step.value}
@@ -1275,11 +1317,25 @@ function SettingsWindow() {
                   ))}
                   <div className="replacement-actions">
                     <button type="button" onClick={() => addToolchainStep(chainIndex)}>Step hinzufuegen</button>
+                    <button type="button" onClick={() => runToolchainDryRun(chain)}>Dry-Run</button>
+                    <button type="button" onClick={() => runToolchainNow(chain)}>Jetzt ausfuehren</button>
                     <button type="button" onClick={() => removeToolchain(chainIndex)}>Toolchain loeschen</button>
                   </div>
                 </div>
               ))}
             </div>
+            {toolchainDryRunResult ? (
+              <div className="provider-row">
+                <strong>Dry-Run: {toolchainDryRunResult.toolchainName}</strong>
+                <small>{toolchainDryRunResult.executable ? "Ausfuehrbar" : "Blockiert/Warnungen"}</small>
+                {toolchainDryRunResult.steps.map((step) => (
+                  <small key={`dry-${step}`}>{step}</small>
+                ))}
+                {toolchainDryRunResult.warnings.map((warning) => (
+                  <small key={`warn-${warning}`}>{warning}</small>
+                ))}
+              </div>
+            ) : null}
           </SettingsGroup>
           )}
 
@@ -1356,6 +1412,17 @@ function SettingsWindow() {
                 }}
               >
                 Nach Updates suchen
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setUpdateState("Lade Update im Hintergrund...");
+                  downloadLatestUpdateBackground()
+                    .then((message) => setUpdateState(message))
+                    .catch((error: unknown) => setUpdateState(error instanceof Error ? error.message : String(error)));
+                }}
+              >
+                Update im Hintergrund laden
               </button>
               <button
                 type="button"

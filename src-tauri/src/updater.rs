@@ -112,60 +112,7 @@ pub fn install_latest_appimage() -> Result<String, String> {
     }
 
     let release = selected.release;
-    let asset = release
-        .assets
-        .iter()
-        .find(|asset| {
-            let name = asset.name.to_ascii_lowercase();
-            name.ends_with(".appimage") && name.contains("amd64")
-        })
-        .or_else(|| {
-            release
-                .assets
-                .iter()
-                .find(|asset| asset.name.to_ascii_lowercase().ends_with(".appimage"))
-        })
-        .ok_or_else(|| "Keine AppImage-Datei im neuesten Release gefunden".to_string())?;
-
-    let checksum_asset = release.assets.iter().find(|checksum| {
-        let name = checksum.name.to_ascii_lowercase();
-        name == format!("{}.sha256", asset.name.to_ascii_lowercase())
-    });
-
-    let response = reqwest::blocking::Client::new()
-        .get(&asset.browser_download_url)
-        .header("User-Agent", "twokey-ai")
-        .send()
-        .map_err(|error| format!("Update-Datei konnte nicht heruntergeladen werden: {error}"))?;
-
-    if !response.status().is_success() {
-        return Err(format!("Download antwortete mit HTTP {}", response.status()));
-    }
-
-    let bytes = response
-        .bytes()
-        .map_err(|error| format!("Update-Datei konnte nicht gelesen werden: {error}"))?;
-
-    if let Some(checksum_asset) = checksum_asset {
-        let checksum_response = reqwest::blocking::Client::new()
-            .get(&checksum_asset.browser_download_url)
-            .header("User-Agent", "twokey-ai")
-            .send()
-            .map_err(|error| format!("Checksum-Datei konnte nicht heruntergeladen werden: {error}"))?;
-        if !checksum_response.status().is_success() {
-            return Err(format!("Checksum-Download antwortete mit HTTP {}", checksum_response.status()));
-        }
-
-        let checksum_text = checksum_response
-            .text()
-            .map_err(|error| format!("Checksum-Datei konnte nicht gelesen werden: {error}"))?;
-        let expected = parse_sha256_line(&checksum_text)
-            .ok_or_else(|| "Checksum-Datei hat ein ungueltiges Format".to_string())?;
-        let actual = hex_sha256(&bytes);
-        if expected.to_ascii_lowercase() != actual {
-            return Err("Checksum-Pruefung fehlgeschlagen. Update wurde abgebrochen.".to_string());
-        }
-    }
+    let bytes = download_release_appimage_bytes(&release)?;
 
     let target = update_binary_path()?;
     if let Some(parent) = target.parent() {
@@ -219,6 +166,101 @@ pub fn install_latest_appimage() -> Result<String, String> {
     }
 
     Ok(format!("Update {} (Kanal: {}) heruntergeladen und gestartet.", release.tag_name, channel))
+}
+
+pub fn download_latest_appimage_background() -> Result<String, String> {
+    let channel = settings::load().unwrap_or_default().update_channel;
+    let selected = fetch_release_for_channel(&channel)?
+        .ok_or_else(|| format!("Kein Release fuer Kanal '{channel}' gefunden"))?;
+    if !selected.eligible {
+        return Err(format!(
+            "Dieses Update ist noch nicht fuer diese Installation freigeschaltet (Rollout {}%, Kohorte {}).",
+            selected.rollout_percentage,
+            selected.cohort_bucket
+        ));
+    }
+
+    let release = selected.release;
+    let bytes = download_release_appimage_bytes(&release)?;
+    let staged = staged_update_binary_path()?;
+    if let Some(parent) = staged.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|error| format!("Update-Verzeichnis konnte nicht erstellt werden: {error}"))?;
+    }
+
+    fs::write(&staged, &bytes).map_err(|error| format!("Staging-Datei konnte nicht geschrieben werden: {error}"))?;
+    let mut perms = fs::metadata(&staged)
+        .map_err(|error| format!("Dateiberechtigungen konnten nicht gelesen werden: {error}"))?
+        .permissions();
+    perms.set_mode(0o755);
+    fs::set_permissions(&staged, perms).map_err(|error| format!("Staging-Datei konnte nicht ausfuehrbar gemacht werden: {error}"))?;
+
+    Ok(format!(
+        "Update {} (Kanal: {}) wurde im Hintergrund geladen nach {}",
+        release.tag_name,
+        channel,
+        staged.to_string_lossy()
+    ))
+}
+
+fn download_release_appimage_bytes(release: &GithubRelease) -> Result<Vec<u8>, String> {
+    let asset = release
+        .assets
+        .iter()
+        .find(|asset| {
+            let name = asset.name.to_ascii_lowercase();
+            name.ends_with(".appimage") && name.contains("amd64")
+        })
+        .or_else(|| {
+            release
+                .assets
+                .iter()
+                .find(|asset| asset.name.to_ascii_lowercase().ends_with(".appimage"))
+        })
+        .ok_or_else(|| "Keine AppImage-Datei im neuesten Release gefunden".to_string())?;
+
+    let checksum_asset = release.assets.iter().find(|checksum| {
+        let name = checksum.name.to_ascii_lowercase();
+        name == format!("{}.sha256", asset.name.to_ascii_lowercase())
+    });
+
+    let response = reqwest::blocking::Client::new()
+        .get(&asset.browser_download_url)
+        .header("User-Agent", "twokey-ai")
+        .send()
+        .map_err(|error| format!("Update-Datei konnte nicht heruntergeladen werden: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("Download antwortete mit HTTP {}", response.status()));
+    }
+
+    let bytes = response
+        .bytes()
+        .map_err(|error| format!("Update-Datei konnte nicht gelesen werden: {error}"))?
+        .to_vec();
+
+    if let Some(checksum_asset) = checksum_asset {
+        let checksum_response = reqwest::blocking::Client::new()
+            .get(&checksum_asset.browser_download_url)
+            .header("User-Agent", "twokey-ai")
+            .send()
+            .map_err(|error| format!("Checksum-Datei konnte nicht heruntergeladen werden: {error}"))?;
+        if !checksum_response.status().is_success() {
+            return Err(format!("Checksum-Download antwortete mit HTTP {}", checksum_response.status()));
+        }
+
+        let checksum_text = checksum_response
+            .text()
+            .map_err(|error| format!("Checksum-Datei konnte nicht gelesen werden: {error}"))?;
+        let expected = parse_sha256_line(&checksum_text)
+            .ok_or_else(|| "Checksum-Datei hat ein ungueltiges Format".to_string())?;
+        let actual = hex_sha256(&bytes);
+        if expected.to_ascii_lowercase() != actual {
+            return Err("Checksum-Pruefung fehlgeschlagen. Update wurde abgebrochen.".to_string());
+        }
+    }
+
+    Ok(bytes)
 }
 
 fn fetch_release_for_channel(channel: &str) -> Result<Option<SelectedRelease>, String> {
@@ -345,6 +387,17 @@ fn update_binary_path() -> Result<PathBuf, String> {
     };
 
     Ok(base.join("twokey").join("bin").join("twokey-ai.AppImage"))
+}
+
+fn staged_update_binary_path() -> Result<PathBuf, String> {
+    let base = if let Ok(value) = std::env::var("XDG_DATA_HOME") {
+        PathBuf::from(value)
+    } else {
+        let home = std::env::var("HOME").map_err(|_| "HOME ist nicht gesetzt".to_string())?;
+        PathBuf::from(home).join(".local").join("share")
+    };
+
+    Ok(base.join("twokey").join("bin").join("twokey-ai.AppImage.staged"))
 }
 
 fn parse_sha256_line(text: &str) -> Option<String> {

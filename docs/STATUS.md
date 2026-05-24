@@ -60,12 +60,15 @@ Align runtime behavior with the video UX:
 - Local Whisper runtime diagnostics endpoint wired into settings.
 - Runtime diagnostics panel in settings for desktop/session backend, STT/TTS readiness and recent runtime failures.
 - Visual Toolchain/Workflow editor in settings (create/edit/remove chains and steps).
+- Toolchain action catalog erweitert (`open_url`, `open_app`, `shell`, `wait_ms`, `check_command`).
+- Toolchain safety controls: dangerous shell pattern blocking + Dry-Run preview + manual execution confirmation in settings.
 - TTS backend support:
   - spd-say
   - espeak-ng / espeak
 - Tray icon/menu support.
 - GitHub release update check in settings.
 - AppImage update download-and-start from settings.
+- Optional background update download to staged AppImage path.
 - Release pipeline publishes checksum + keyless signatures for AppImage assets.
 - CI workflow validates TS and Rust compile checks on each push/PR.
 - Wayland fallback via manual recording controls in the overlay menu.
@@ -75,6 +78,7 @@ Align runtime behavior with the video UX:
   - insertion via `wtype`/`ydotool`
   - selected-text read via `wtype` + `wl-paste` when available
 - Runtime smoke E2E tests for X11/Wayland added and wired in CI matrix.
+- Interaction-level Toolchain E2E tests added and wired in CI.
 - Updater supports channel-aware release selection and checksum verification.
 - Updater restores previous local AppImage if updated binary start fails.
 - Updater supports staged rollout cohorts via release marker (`twokey-rollout:<percent>`).
@@ -90,7 +94,7 @@ Align runtime behavior with the video UX:
 1. Remote rollout management (dashboard/control plane) beyond release-note marker control.
 2. Deeper compositor-native Wayland integrations beyond current safe integration paths.
 3. Full end-to-end runtime integration tests on real compositor sessions (beyond smoke-level checks).
-4. Richer action catalog and execution safety controls for visual toolchains.
+4. Snapshot/regression UI tests for settings and overlay interactions.
 
 ## Validation Snapshot
 
@@ -99,6 +103,6 @@ Align runtime behavior with the video UX:
 
 ## Next Priorities
 
-1. Expand runtime tests from smoke checks to real interaction E2E scenarios.
+1. Expand runtime tests from interaction E2E to compositor-native real-session E2E scenarios.
 2. Add compositor-native hold-hotkey integrations where portals/protocols allow it.
-3. Extend workflow builder with step templates and dry-run validation.
+3. Add visual templates/presets and permission profiles for workflow steps.

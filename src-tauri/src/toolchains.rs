@@ -2,6 +2,8 @@ use std::{
     fs,
     path::PathBuf,
     process::{Command, Stdio},
+    thread,
+    time::Duration,
 };
 
 use serde::{Deserialize, Serialize};
@@ -24,6 +26,16 @@ pub struct ToolchainStep {
     pub value: String,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ToolchainDryRun {
+    pub toolchain_id: String,
+    pub toolchain_name: String,
+    pub executable: bool,
+    pub steps: Vec<String>,
+    pub warnings: Vec<String>,
+}
+
 pub fn run_for_transcript(transcript: &str) -> Result<Option<String>, String> {
     let normalized = transcript.trim().to_lowercase();
     if normalized.is_empty() {
@@ -35,9 +47,7 @@ pub fn run_for_transcript(transcript: &str) -> Result<Option<String>, String> {
         return Ok(None);
     };
 
-    for step in &chain.steps {
-        run_step(step)?;
-    }
+    run_chain_steps(&chain)?;
 
     let message = format!("Toolchain ausgefuehrt: {}", chain.name);
     let _ = history::record(history::AuditEvent {
@@ -51,6 +61,56 @@ pub fn run_for_transcript(transcript: &str) -> Result<Option<String>, String> {
     });
 
     Ok(Some(message))
+}
+
+pub fn run_by_id(id: &str) -> Result<String, String> {
+    let toolchains = load_toolchains()?;
+    let chain = toolchains
+        .into_iter()
+        .find(|chain| chain.id == id)
+        .ok_or_else(|| format!("Toolchain '{}' wurde nicht gefunden", id))?;
+
+    run_chain_steps(&chain)?;
+    let message = format!("Toolchain ausgefuehrt: {}", chain.name);
+
+    let _ = history::record(history::AuditEvent {
+        kind: "toolchain".to_string(),
+        mode: Some("manual".to_string()),
+        provider: None,
+        input_text: Some(id.to_string()),
+        output_text: Some(message.clone()),
+        metadata_json: Some(format!("{{\"toolchainId\":\"{}\",\"source\":\"manual\"}}", chain.id)),
+        success: true,
+    });
+
+    Ok(message)
+}
+
+pub fn dry_run_by_id(id: &str) -> Result<ToolchainDryRun, String> {
+    let toolchains = load_toolchains()?;
+    let chain = toolchains
+        .into_iter()
+        .find(|chain| chain.id == id)
+        .ok_or_else(|| format!("Toolchain '{}' wurde nicht gefunden", id))?;
+
+    let mut steps = Vec::new();
+    let mut warnings = Vec::new();
+
+    for (index, step) in chain.steps.iter().enumerate() {
+        let step_no = index + 1;
+        steps.push(format!("{step_no}. {} -> {}", step.kind, step.value));
+        if let Some(warning) = step_warning(step) {
+            warnings.push(format!("Step {step_no}: {warning}"));
+        }
+    }
+
+    Ok(ToolchainDryRun {
+        toolchain_id: chain.id,
+        toolchain_name: chain.name,
+        executable: warnings.is_empty(),
+        steps,
+        warnings,
+    })
 }
 
 pub fn load_toolchains() -> Result<Vec<Toolchain>, String> {
@@ -102,7 +162,7 @@ fn validate_toolchains(toolchains: &[Toolchain]) -> Result<(), String> {
 
         for step in &chain.steps {
             let kind = step.kind.trim();
-            if !matches!(kind, "open_url" | "open_app" | "shell") {
+            if !matches!(kind, "open_url" | "open_app" | "shell" | "wait_ms" | "check_command") {
                 return Err(format!(
                     "Toolchain '{}' enthaelt ungueltigen Step-Typ '{}'",
                     chain.id, step.kind
@@ -114,13 +174,36 @@ fn validate_toolchains(toolchains: &[Toolchain]) -> Result<(), String> {
                     chain.id, step.kind
                 ));
             }
+
+            if kind == "wait_ms" {
+                step.value
+                    .trim()
+                    .parse::<u64>()
+                    .map_err(|_| format!("Toolchain '{}' hat ungueltiges wait_ms '{}'; erwartet Millisekunden", chain.id, step.value))?;
+            }
+
+            if let Some(warning) = step_warning(step) {
+                return Err(format!("Toolchain '{}' wurde blockiert: {warning}", chain.id));
+            }
         }
     }
 
     Ok(())
 }
 
+fn run_chain_steps(chain: &Toolchain) -> Result<(), String> {
+    for step in &chain.steps {
+        run_step(step)?;
+    }
+
+    Ok(())
+}
+
 fn run_step(step: &ToolchainStep) -> Result<(), String> {
+    if let Some(warning) = step_warning(step) {
+        return Err(format!("Step wurde aus Sicherheitsgruenden blockiert: {warning}"));
+    }
+
     match step.kind.as_str() {
         "open_url" => {
             let status = Command::new("xdg-open")
@@ -156,8 +239,55 @@ fn run_step(step: &ToolchainStep) -> Result<(), String> {
                 Err(format!("shell-step schlug fehl mit Status {status}"))
             }
         }
+        "wait_ms" => {
+            let millis = step
+                .value
+                .trim()
+                .parse::<u64>()
+                .map_err(|_| format!("wait_ms erwartet Millisekunden als Zahl, bekam '{}'", step.value))?;
+            thread::sleep(Duration::from_millis(millis.min(60_000)));
+            Ok(())
+        }
+        "check_command" => {
+            let command = step.value.trim();
+            let status = Command::new("sh")
+                .arg("-c")
+                .arg(format!("command -v {command} >/dev/null 2>&1"))
+                .status()
+                .map_err(|error| format!("check_command konnte nicht gestartet werden: {error}"))?;
+
+            if status.success() {
+                Ok(())
+            } else {
+                Err(format!("check_command fehlgeschlagen: '{command}' ist nicht verfuegbar"))
+            }
+        }
         _ => Err(format!("Unbekannter Toolchain-Step: {}", step.kind)),
     }
+}
+
+fn step_warning(step: &ToolchainStep) -> Option<String> {
+    if step.kind != "shell" {
+        return None;
+    }
+
+    let lower = step.value.to_ascii_lowercase();
+    let dangerous_patterns = [
+        "rm -rf /",
+        "mkfs",
+        "dd if=",
+        "shutdown",
+        "reboot",
+        ":(){",
+    ];
+
+    for pattern in dangerous_patterns {
+        if lower.contains(pattern) {
+            return Some(format!("gefaehrliches shell-Muster erkannt ('{pattern}')"));
+        }
+    }
+
+    None
 }
 
 fn toolchains_path() -> Result<PathBuf, String> {
