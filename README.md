@@ -16,6 +16,24 @@ Phase 1 implements the foundation only:
 
 No TTS or text injection is implemented yet.
 
+## Installation
+
+```bash
+npm install twokey
+```
+
+## Minimal Usage
+
+```ts
+import { getPackageInfo } from "twokey";
+
+const info = getPackageInfo();
+console.log(info.name);
+console.log(info.runtimeStatus.waylandGlobalHotkeys);
+```
+
+The package exports runtime status metadata. Current status includes planned/limited areas such as Wayland global hotkeys, TTS, tray menu, SQLite history/audit, and online provider execution until secure API-key storage is implemented.
+
 ## Requirements
 
 - Linux desktop
@@ -153,6 +171,14 @@ docs/                 Product, architecture, security, and status docs
 src/                  React frontend
 src-tauri/            Rust/Tauri desktop shell
 ```
+
+## Repository
+
+GitHub: https://github.com/meinzeug/twokey
+
+## License
+
+MIT. See `LICENSE`.
 
 ## Linux Notes
 

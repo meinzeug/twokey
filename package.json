@@ -1,12 +1,44 @@
 {
-  "name": "twokey-linux-ai-assistant",
-  "version": "0.1.0",
-  "private": true,
+  "name": "twokey",
+  "version": "1.0.0",
+  "description": "Linux-first desktop AI assistant built with Tauri, React, and TypeScript.",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meinzeug/twokey.git"
+  },
+  "bugs": {
+    "url": "https://github.com/meinzeug/twokey/issues"
+  },
+  "homepage": "https://github.com/meinzeug/twokey#readme",
   "type": "module",
+  "main": "./lib/index.js",
+  "module": "./lib/index.js",
+  "types": "./lib/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./lib/index.d.ts",
+      "import": "./lib/index.js",
+      "default": "./lib/index.js"
+    }
+  },
+  "files": [
+    "lib",
+    "README.md",
+    "LICENSE"
+  ],
+  "publishConfig": {
+    "access": "public"
+  },
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc && vite build",
+    "typecheck": "tsc --noEmit",
+    "build": "npm run build:package && vite build",
+    "build:package": "tsc -p tsconfig.package.json",
     "preview": "vite preview --host 127.0.0.1",
+    "lint": "npm run typecheck",
+    "test": "npm run typecheck",
+    "prepublishOnly": "npm run build && npm pack --dry-run",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },

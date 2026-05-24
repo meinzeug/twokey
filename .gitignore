@@ -1,5 +1,6 @@
 node_modules/
 dist/
+lib/
 target/
 src-tauri/target/
 
@@ -13,3 +14,4 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+.npmrc
