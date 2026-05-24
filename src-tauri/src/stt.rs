@@ -1,7 +1,9 @@
 use std::{
     env, fs,
+    io::Write,
     path::{Path, PathBuf},
-    process::Command,
+    process::{Command, Stdio},
+    time::{SystemTime, UNIX_EPOCH},
 };
 
 use reqwest::blocking::multipart;
@@ -108,6 +110,12 @@ pub fn ensure_local_whisper_installed() -> Result<(), String> {
     })
 }
 
+pub fn ensure_local_whisper_runtime(sudo_password: Option<&str>) -> Result<String, String> {
+    ensure_local_whisper_installed()?;
+    ensure_ffmpeg_installed(sudo_password)?;
+    Ok("Whisper und ffmpeg sind bereit.".to_string())
+}
+
 pub fn local_whisper_diagnostics() -> LocalWhisperDiagnostics {
     let whisper_path = whisper_venv_path().join("bin").join("whisper");
     let ffmpeg_path = twokey_managed_bin_path("ffmpeg");
@@ -139,6 +147,8 @@ fn transcribe_with_local_whisper(
     whisper_model: &str,
     whisper_beam_size: u8,
 ) -> Result<Transcript, String> {
+    ensure_local_whisper_installed()?;
+
     if !audio_path.is_file() {
         return Err(format!(
             "Audiodatei fuer Transkription wurde nicht gefunden: {}",
@@ -148,35 +158,37 @@ fn transcribe_with_local_whisper(
 
     let ffmpeg_program = find_ffmpeg_program();
     let clip_duration = estimate_audio_duration_secs(audio_path);
-    let short_clip_fast_path = clip_duration.is_some_and(|duration| duration <= 6.0);
+    if clip_duration.is_some_and(|duration| duration < 0.9) {
+        return Err("Aufnahme zu kurz fuer verlaessliche Transkription. Bitte Hotkey laenger halten und den Satz komplett sprechen.".to_string());
+    }
+
+    let short_clip_fast_path = clip_duration.is_some_and(|duration| duration <= 2.5);
 
     let effective_model = if short_clip_fast_path {
         match whisper_model {
-            "large-v3" => "small",
+            "large-v3" => "medium",
             "medium" => "base",
-            "small" => "tiny",
             _ => whisper_model,
         }
     } else {
         whisper_model
     };
 
-    let effective_beam_size: u8 = if short_clip_fast_path {
-        1
-    } else {
-        whisper_beam_size.clamp(1, 10)
-    };
+    let effective_beam_size: u8 = whisper_beam_size.clamp(1, 10);
 
-    let mut commands: Vec<Vec<String>> = Vec::new();
+    let mut commands: Vec<(Vec<String>, Option<PathBuf>)> = Vec::new();
     if command_exists("whisper-cli") {
-        commands.push(vec![
-            "whisper-cli".to_string(),
-            "-f".to_string(),
-            audio_path.to_string_lossy().to_string(),
-            "-l".to_string(),
-            language.to_string(),
-            "-nt".to_string(),
-        ]);
+        commands.push((
+            vec![
+                "whisper-cli".to_string(),
+                "-f".to_string(),
+                audio_path.to_string_lossy().to_string(),
+                "-l".to_string(),
+                language.to_string(),
+                "-nt".to_string(),
+            ],
+            None,
+        ));
     }
 
     if let Some(whisper_program) = find_whisper_program() {
@@ -188,27 +200,80 @@ fn transcribe_with_local_whisper(
         }
 
         let beam_size = effective_beam_size.to_string();
-        commands.push(vec![
-            whisper_program,
-            audio_path.to_string_lossy().to_string(),
-            "--language".to_string(),
-            language.to_string(),
-            "--model".to_string(),
-            effective_model.to_string(),
-            "--beam_size".to_string(),
-            beam_size,
-            "--best_of".to_string(),
-            "1".to_string(),
-            "--temperature".to_string(),
-            "0".to_string(),
-            "--fp16".to_string(),
-            "False".to_string(),
-        ]);
+
+        let output_dir = unique_whisper_output_dir();
+        let _ = fs::create_dir_all(&output_dir);
+        commands.push((
+            vec![
+                whisper_program.clone(),
+                audio_path.to_string_lossy().to_string(),
+                "--language".to_string(),
+                language.to_string(),
+                "--model".to_string(),
+                effective_model.to_string(),
+                "--beam_size".to_string(),
+                beam_size,
+                "--best_of".to_string(),
+                "1".to_string(),
+                "--temperature".to_string(),
+                "0".to_string(),
+                "--fp16".to_string(),
+                "False".to_string(),
+                "--condition_on_previous_text".to_string(),
+                "False".to_string(),
+                "--no_speech_threshold".to_string(),
+                "0.6".to_string(),
+                "--logprob_threshold".to_string(),
+                "-1.0".to_string(),
+                "--compression_ratio_threshold".to_string(),
+                "2.4".to_string(),
+                "--output_format".to_string(),
+                "txt".to_string(),
+                "--output_dir".to_string(),
+                output_dir.to_string_lossy().to_string(),
+            ],
+            Some(output_dir),
+        ));
+
+        // Fallback pass: auto language + tiny model to avoid empty results on very short clips.
+        let fallback_output_dir = unique_whisper_output_dir();
+        let _ = fs::create_dir_all(&fallback_output_dir);
+        commands.push((
+            vec![
+                whisper_program,
+                audio_path.to_string_lossy().to_string(),
+                "--language".to_string(),
+                language.to_string(),
+                "--model".to_string(),
+                "base".to_string(),
+                "--beam_size".to_string(),
+                "2".to_string(),
+                "--best_of".to_string(),
+                "1".to_string(),
+                "--temperature".to_string(),
+                "0".to_string(),
+                "--fp16".to_string(),
+                "False".to_string(),
+                "--condition_on_previous_text".to_string(),
+                "False".to_string(),
+                "--no_speech_threshold".to_string(),
+                "0.6".to_string(),
+                "--logprob_threshold".to_string(),
+                "-1.0".to_string(),
+                "--compression_ratio_threshold".to_string(),
+                "2.4".to_string(),
+                "--output_format".to_string(),
+                "txt".to_string(),
+                "--output_dir".to_string(),
+                fallback_output_dir.to_string_lossy().to_string(),
+            ],
+            Some(fallback_output_dir),
+        ));
     }
 
     let mut attempt_errors: Vec<String> = Vec::new();
 
-    for command in commands {
+    for (command, output_dir) in commands {
         let program = &command[0];
         let mut process = Command::new(program);
         process.args(&command[1..]);
@@ -235,10 +300,24 @@ fn transcribe_with_local_whisper(
             continue;
         }
 
-        let text = stdout;
+        let mut text = stdout;
+        if text.is_empty() {
+            if let Some(ref dir) = output_dir {
+                if let Ok(from_file) = read_whisper_txt_output(audio_path, dir) {
+                    text = from_file;
+                } else if let Ok(from_scan) = read_any_whisper_txt_output(dir) {
+                    text = from_scan;
+                }
+            }
+        }
+
         if text.is_empty() {
             if !stderr.is_empty() {
                 attempt_errors.push(format!("{program}: {stderr}"));
+            } else {
+                attempt_errors.push(format!(
+                    "{program}: Kein stdout und keine lesbare Whisper-Outputdatei"
+                ));
             }
             continue;
         }
@@ -256,43 +335,114 @@ fn transcribe_with_local_whisper(
     }
 
     if attempt_errors.is_empty() {
-        Err("Kein lokales Whisper-CLI gefunden oder es lieferte kein Transkript".to_string())
-    } else {
-        Err(format!(
-            "Lokale Whisper-Transkription fehlgeschlagen: {}",
-            attempt_errors.join(" | ")
-        ))
+        return Err("Lokal Whisper lieferte kein Transkript. Bitte pruefe Aufnahmepegel und Spracheinstellung.".to_string());
     }
+
+    let only_empty_output_failures = attempt_errors
+        .iter()
+        .all(|error| error.contains("Kein stdout und keine lesbare Whisper-Outputdatei"));
+
+    if only_empty_output_failures {
+        return Ok(Transcript {
+            text: "Keine Sprache erkannt.".to_string(),
+            provider: "local-whisper".to_string(),
+        });
+    }
+
+    Err(format!(
+        "Lokale Whisper-Transkription fehlgeschlagen: {}",
+        attempt_errors.join(" | ")
+    ))
+}
+
+fn unique_whisper_output_dir() -> PathBuf {
+    let ts = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_millis())
+        .unwrap_or(0);
+    env::temp_dir().join(format!("twokey-whisper-{ts}"))
+}
+
+fn read_whisper_txt_output(audio_path: &Path, output_dir: &Path) -> Result<String, String> {
+    let stem = audio_path
+        .file_stem()
+        .and_then(|value| value.to_str())
+        .ok_or_else(|| "Dateiname der Audiodatei konnte nicht gelesen werden".to_string())?;
+
+    let txt_path = output_dir.join(format!("{stem}.txt"));
+    if !txt_path.is_file() {
+        return Err(format!(
+            "Whisper-Outputdatei wurde nicht erzeugt: {}",
+            txt_path.to_string_lossy()
+        ));
+    }
+
+    let text = fs::read_to_string(&txt_path)
+        .map_err(|error| format!("Whisper-Output konnte nicht gelesen werden: {error}"))?
+        .trim()
+        .to_string();
+
+    if text.is_empty() {
+        return Err("Whisper-Outputdatei war leer".to_string());
+    }
+
+    Ok(text)
+}
+
+fn read_any_whisper_txt_output(output_dir: &Path) -> Result<String, String> {
+    let mut txt_paths: Vec<PathBuf> = fs::read_dir(output_dir)
+        .map_err(|error| format!("Whisper-Outputverzeichnis konnte nicht gelesen werden: {error}"))?
+        .filter_map(|entry| entry.ok().map(|value| value.path()))
+        .filter(|path| path.extension().and_then(|value| value.to_str()) == Some("txt"))
+        .collect();
+
+    txt_paths.sort();
+
+    for path in txt_paths {
+        let text = fs::read_to_string(&path)
+            .map_err(|error| format!("Whisper-Output konnte nicht gelesen werden: {error}"))?
+            .trim()
+            .to_string();
+        if !text.is_empty() {
+            return Ok(text);
+        }
+    }
+
+    Err("Keine nutzbare Whisper-Outputdatei im Outputverzeichnis gefunden".to_string())
 }
 
 fn sanitize_transcript(input: &str) -> String {
     let mut out = String::with_capacity(input.len());
-    let mut chars = input.chars().peekable();
+    let chars: Vec<char> = input.chars().collect();
+    let mut index = 0;
 
-    while let Some(ch) = chars.next() {
-        if ch == '[' {
+    while index < chars.len() {
+        if chars[index] == '[' {
             let mut marker = String::new();
-            while let Some(next) = chars.next() {
+            let mut cursor = index + 1;
+            while cursor < chars.len() {
+                let next = chars[cursor];
                 marker.push(next);
-                if next == ']' {
-                    break;
-                }
-                if marker.len() > 40 {
+                cursor += 1;
+                if next == ']' || marker.len() > 40 {
                     break;
                 }
             }
 
             let lower = marker.to_ascii_lowercase();
             if marker.ends_with(']') && lower.contains("-->") {
+                index = cursor;
                 continue;
             }
 
             out.push('[');
             out.push_str(&marker);
+            index = cursor;
             continue;
         }
 
-        out.push(ch);
+        out.push(chars[index]);
+        index += 1;
     }
 
     out.split_whitespace().collect::<Vec<_>>().join(" ")
@@ -420,6 +570,88 @@ fn install_whisper_in_venv() -> Result<(), String> {
     }
 
     Ok(())
+}
+
+fn ensure_ffmpeg_installed(sudo_password: Option<&str>) -> Result<(), String> {
+    if find_ffmpeg_program().is_some() {
+        return Ok(());
+    }
+
+    if !command_exists("apt-get") {
+        return Err("ffmpeg fehlt und apt-get ist nicht verfuegbar. Bitte ffmpeg manuell installieren oder Runtime-Setup ueber die CLI ausfuehren.".to_string());
+    }
+
+    run_privileged_command("apt-get", &["install", "-y", "ffmpeg"], sudo_password)?;
+
+    if find_ffmpeg_program().is_some() {
+        Ok(())
+    } else {
+        Err("ffmpeg konnte nicht verifiziert werden. Bitte Installation manuell pruefen.".to_string())
+    }
+}
+
+fn run_privileged_command(program: &str, args: &[&str], sudo_password: Option<&str>) -> Result<(), String> {
+    if is_root() {
+        return run_command(program, args);
+    }
+
+    if let Some(password) = sudo_password.map(str::trim).filter(|value| !value.is_empty()) {
+        if !command_exists("sudo") {
+            return Err("sudo wurde nicht gefunden. Bitte ffmpeg manuell installieren oder TwoKey als root starten.".to_string());
+        }
+
+        let mut child = Command::new("sudo")
+            .args(["-S", "-p", "", program])
+            .args(args)
+            .stdin(Stdio::piped())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .spawn()
+            .map_err(|error| format!("sudo konnte nicht gestartet werden: {error}"))?;
+
+        if let Some(stdin) = child.stdin.as_mut() {
+            stdin
+                .write_all(format!("{password}\n").as_bytes())
+                .map_err(|error| format!("sudo-Passwort konnte nicht uebergeben werden: {error}"))?;
+        }
+
+        let output = child
+            .wait_with_output()
+            .map_err(|error| format!("sudo-Installation konnte nicht abgeschlossen werden: {error}"))?;
+
+        if output.status.success() {
+            return Ok(());
+        }
+
+        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        let detail = if !stderr.is_empty() {
+            stderr
+        } else if !stdout.is_empty() {
+            stdout
+        } else {
+            format!("Exit-Code {}", output.status)
+        };
+
+        return Err(detail);
+    }
+
+    if command_exists("pkexec") {
+        let mut pkexec_args = vec![program];
+        pkexec_args.extend(args.iter().copied());
+        return run_command("pkexec", &pkexec_args);
+    }
+
+    Err("ffmpeg fehlt. Gib im Dialog ein sudo-Passwort ein oder installiere ffmpeg manuell.".to_string())
+}
+
+fn is_root() -> bool {
+    Command::new("sh")
+        .arg("-c")
+        .arg("id -u")
+        .output()
+        .map(|output| String::from_utf8_lossy(&output.stdout).trim() == "0")
+        .unwrap_or(false)
 }
 
 fn run_command(program: &str, args: &[&str]) -> Result<(), String> {

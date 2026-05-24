@@ -104,6 +104,20 @@ pub fn chat(prompt: &str) -> Result<String, String> {
 pub fn chat_with_context(prompt: &str, context: Option<ChatFileContext>) -> Result<String, String> {
     let app_settings = settings::load().unwrap_or_default();
     let provider_order = provider_fallback_order(&app_settings, context.as_ref());
+
+    if provider_order.is_empty() {
+        let fallback_answer = build_local_fallback_answer(prompt, &["Kein aktiver Chat-Provider verfuegbar".to_string()]);
+        let _ = history::record(history::AuditEvent {
+            kind: "chat".to_string(),
+            mode: Some("conversation".to_string()),
+            provider: Some("fallback-local".to_string()),
+            input_text: Some(prompt.to_string()),
+            output_text: Some(fallback_answer.clone()),
+            metadata_json: None,
+            success: true,
+        });
+        return Ok(fallback_answer);
+    }
     let mut errors: Vec<String> = Vec::new();
     let mut selected_provider = "unknown".to_string();
     let mut result: Result<String, String> = Err("Kein Provider verfuegbar".to_string());
@@ -138,10 +152,9 @@ pub fn chat_with_context(prompt: &str, context: Option<ChatFileContext>) -> Resu
     }
 
     if result.is_err() && !errors.is_empty() {
-        result = Err(format!(
-            "Alle konfigurierten Chat-Provider fehlgeschlagen: {}",
-            errors.join(" | ")
-        ));
+        let fallback_answer = build_local_fallback_answer(prompt, &errors);
+        selected_provider = "fallback-local".to_string();
+        result = Ok(fallback_answer);
     }
 
     let _ = history::record(history::AuditEvent {
@@ -155,6 +168,31 @@ pub fn chat_with_context(prompt: &str, context: Option<ChatFileContext>) -> Resu
     });
 
     result
+}
+
+fn build_local_fallback_answer(prompt: &str, errors: &[String]) -> String {
+    let compact_prompt = prompt
+        .split_whitespace()
+        .take(40)
+        .collect::<Vec<_>>()
+        .join(" ");
+
+    let provider_hint = errors
+        .iter()
+        .take(2)
+        .cloned()
+        .collect::<Vec<_>>()
+        .join(" | ");
+
+    format!(
+        "Ich konnte aktuell keinen Chat-Provider erreichen.\n\nKurzfassung deiner Eingabe:\n{}\n\nBitte pruefe Ollama/API-Key in den Einstellungen.{}",
+        compact_prompt,
+        if provider_hint.is_empty() {
+            "".to_string()
+        } else {
+            format!("\n\nDetails: {provider_hint}")
+        }
+    )
 }
 
 fn choose_provider(app_settings: &settings::AppSettings, context: Option<&ChatFileContext>) -> String {
@@ -194,6 +232,10 @@ fn provider_fallback_order(app_settings: &settings::AppSettings, context: Option
     if primary == "ollama" {
         ordered.retain(|provider| provider != "ollama");
         ordered.insert(0, "ollama".to_string());
+    }
+
+    if ordered.first().is_some_and(|provider| provider == "ollama") && !ollama::is_ready() {
+        ordered.retain(|provider| provider != "ollama");
     }
 
     let mut deduped: Vec<String> = Vec::new();

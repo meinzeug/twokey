@@ -56,6 +56,10 @@ if (isRoot && sudoUser && sudoUser !== "root") {
   delegated.on("error", () => process.exit(0));
   delegated.on("close", () => process.exit(0));
 } else {
+  if (isRoot) {
+    ensureSystemTtsBackend();
+  }
+
   const runtimePrep = spawn(process.execPath, [cliPath, "--prepare-runtime-only", "--quiet"], {
     stdio: "ignore",
     shell: false,
@@ -101,5 +105,36 @@ function isDesktopRunningForUser(username) {
   }
 
   const out = spawnSync("pgrep", ["-u", username, "-f", "twokey-ai(\\.AppImage)?"], { encoding: "utf8" });
+  return out.status === 0;
+}
+
+function ensureSystemTtsBackend() {
+  if (hasAnyTtsBackend()) {
+    return;
+  }
+
+  if (!commandExists("apt-get")) {
+    return;
+  }
+
+  try {
+    const result = spawnSync("apt-get", ["install", "-y", "espeak-ng"], {
+      stdio: "ignore",
+      shell: false,
+    });
+    if (result.status !== 0) {
+      return;
+    }
+  } catch {
+    // best effort
+  }
+}
+
+function hasAnyTtsBackend() {
+  return commandExists("spd-say") || commandExists("espeak-ng") || commandExists("espeak");
+}
+
+function commandExists(name) {
+  const out = spawnSync("sh", ["-c", `command -v ${name} >/dev/null 2>&1`], { encoding: "utf8" });
   return out.status === 0;
 }

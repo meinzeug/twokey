@@ -36,6 +36,7 @@ export type AppSettings = {
   editAutoApply: boolean;
   punctuationCleanup: boolean;
   ttsEnabled: boolean;
+  ttsBackend: string;
   ttsVoice: string;
   ttsSpeed: number;
   ollamaModel: string;
@@ -139,6 +140,12 @@ export type RuntimeDiagnostics = {
   recentFailures: HistoryEntry[];
 };
 
+export type TtsBackendStatus = {
+  backend: string;
+  available: boolean;
+  message: string;
+};
+
 export async function getDesktopSessionType(): Promise<string> {
   if (!isTauriRuntime()) {
     return "browser-preview";
@@ -215,6 +222,26 @@ export async function speakText(text: string): Promise<string> {
   return invoke<string>("speak_text", { text });
 }
 
+export async function installTtsBackend(backend: string, sudoPassword?: string | null): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann kein TTS-Backend installieren.");
+  }
+
+  return invoke<string>("install_tts_backend", { backend, sudoPassword: sudoPassword ?? null });
+}
+
+export async function getTtsBackendStatus(backend: string): Promise<TtsBackendStatus> {
+  if (!isTauriRuntime()) {
+    return {
+      backend,
+      available: false,
+      message: "Browser-Vorschau kann die TTS-Backend-Verfuegbarkeit nicht pruefen.",
+    };
+  }
+
+  return invoke<TtsBackendStatus>("get_tts_backend_status", { backend });
+}
+
 export async function insertText(text: string): Promise<void> {
   if (!isTauriRuntime()) {
     throw new Error("Browser-Vorschau kann keinen Text in Desktop-Apps einfuegen.");
@@ -257,6 +284,7 @@ export async function getSettings(): Promise<AppSettings> {
       editAutoApply: true,
       punctuationCleanup: false,
       ttsEnabled: false,
+      ttsBackend: "auto",
       ttsVoice: "piper-default",
       ttsSpeed: 1,
       ollamaModel: "qwen2.5:3b",
@@ -444,6 +472,14 @@ export async function getLocalWhisperDiagnostics(): Promise<LocalWhisperDiagnost
   }
 
   return invoke<LocalWhisperDiagnostics>("get_local_whisper_diagnostics");
+}
+
+export async function ensureLocalWhisperRuntime(sudoPassword?: string | null): Promise<string> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keine lokale Whisper-Runtime installieren.");
+  }
+
+  return invoke<string>("ensure_local_whisper_runtime", { sudoPassword: sudoPassword ?? null });
 }
 
 export async function getRuntimeDiagnostics(): Promise<RuntimeDiagnostics> {

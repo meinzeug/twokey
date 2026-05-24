@@ -20,11 +20,14 @@ import {
   getHistoryRecent,
   getDesktopCapabilities,
   getLocalWhisperDiagnostics,
+  getTtsBackendStatus,
   getRuntimeDiagnostics,
+  ensureLocalWhisperRuntime,
   getSettings,
   dryRunToolchainById,
   downloadLatestUpdateBackground,
   installLatestUpdate,
+  installTtsBackend,
   insertText,
   listToolchains,
   listProviders,
@@ -229,7 +232,7 @@ function OverlayApp() {
         setManualCaptureActive(false);
         if (modeRef.current === "conversation") {
           setStatus("thinking");
-          setEventMessage("Pruefe Toolchains...");
+          setEventMessage("KI verarbeitet... Pruefe Toolchains...");
           setAssistantAnswer(null);
 
           Promise.all([getSettings().catch(() => null), listProviders().catch(() => [])])
@@ -272,7 +275,14 @@ function OverlayApp() {
                       getSettings()
                         .then((latestSettings) => {
                           if (latestSettings.ttsEnabled) {
-                            return speakText(answer).catch(() => undefined);
+                            return speakText(answer).catch((error: unknown) => {
+                              if (!mounted) {
+                                return undefined;
+                              }
+                              const message = error instanceof Error ? error.message : String(error);
+                              setEventMessage(`Antwort bereit. TTS fehlgeschlagen: ${message}`);
+                              return undefined;
+                            });
                           }
                           return undefined;
                         })
@@ -286,9 +296,19 @@ function OverlayApp() {
               }
 
               const message = error instanceof Error ? error.message : String(error);
-              setStatus("ready");
+              setStatus("error");
               setEventMessage(`KI-Verarbeitung fehlgeschlagen: ${message}`);
-              setAssistantAnswer("Ich konnte keinen Chat-Provider erfolgreich erreichen. Pruefe Ollama/API-Key in den Einstellungen und versuche es erneut.");
+              const fallback = "Ich konnte keinen Chat-Provider erfolgreich erreichen. Pruefe Ollama/API-Key in den Einstellungen und versuche es erneut.";
+              setAssistantAnswer(fallback);
+
+              getSettings()
+                .then((latestSettings) => {
+                  if (!latestSettings.ttsEnabled) {
+                    return undefined;
+                  }
+                  return speakText(fallback).catch(() => undefined);
+                })
+                .catch(() => undefined);
             });
         } else if (modeRef.current === "edit") {
           setStatus("thinking");
@@ -931,16 +951,107 @@ function SettingsWindow() {
       return;
     }
 
+    if (key === "sttProvider" && value === "local-whisper") {
+      const shouldInstall = window.confirm("Lokales Whisper wurde ausgewaehlt. Soll Whisper inklusive ffmpeg jetzt vorbereitet werden?");
+      if (!shouldInstall) {
+        setSaveState("Whisper-Setup abgebrochen");
+        setSaveStateKind("error");
+        return;
+      }
+
+      const sudoPassword = window.prompt("Optional: sudo-Passwort eingeben, falls ffmpeg installiert werden muss:");
+      if (sudoPassword === null) {
+        setSaveState("Whisper-Setup abgebrochen");
+        setSaveStateKind("error");
+        return;
+      }
+
+      setSaveState("Installiere Whisper-Runtime...");
+      setSaveStateKind("installing");
+      ensureLocalWhisperRuntime(sudoPassword)
+        .then((message) => {
+          setSaveState(message);
+          setSaveStateKind("success");
+
+          const nextSettings = { ...settings, [key]: value };
+          setSettings(nextSettings);
+          setSaveState("Speichere local-whisper...");
+          setSaveStateKind("saving");
+          return saveSettings(nextSettings).then(() => refreshRuntimeDiagnostics());
+        })
+        .then(() => {
+          setSaveState("Gespeichert, Whisper-Runtime installiert");
+          setSaveStateKind("success");
+        })
+        .catch((error: unknown) => {
+          setSaveState(error instanceof Error ? error.message : String(error));
+          setSaveStateKind("error");
+        });
+
+      return;
+    }
+
+    if (key === "ttsBackend" && value !== "auto") {
+      const selectedBackend = String(value);
+      getTtsBackendStatus(selectedBackend)
+        .then((status) => {
+          if (status.available) {
+            return null;
+          }
+
+          const shouldInstall = window.confirm(
+            `Das TTS-Backend '${selectedBackend}' ist nicht installiert. Soll es jetzt installiert werden?`,
+          );
+
+          if (!shouldInstall) {
+            throw new Error("TTS-Backend-Auswahl abgebrochen");
+          }
+
+          const sudoPassword = window.prompt(`Bitte sudo-Passwort eingeben, um ${selectedBackend} zu installieren:`);
+          if (sudoPassword === null) {
+            throw new Error("TTS-Backend-Installation abgebrochen");
+          }
+
+          setSaveState(`Installiere TTS-Backend ${selectedBackend}...`);
+          setSaveStateKind("installing");
+          return installTtsBackend(selectedBackend, sudoPassword).then(async (message) => {
+            setSaveState(message);
+            setSaveStateKind("success");
+            await refreshRuntimeDiagnostics();
+          });
+        })
+        .then(async () => {
+          const nextSettings = { ...settings, [key]: value };
+          setSettings(nextSettings);
+          setSaveState(`Speichere TTS-Backend ${selectedBackend}...`);
+          setSaveStateKind("saving");
+          await saveSettings(nextSettings);
+          setSaveState(`Gespeichert${selectedBackend === "auto" ? "" : `, TTS-Backend ${selectedBackend}`}`);
+          setSaveStateKind("success");
+        })
+        .catch((error: unknown) => {
+          if (error instanceof Error && error.message === "TTS-Backend-Auswahl abgebrochen") {
+            setSaveState("TTS-Backend-Auswahl abgebrochen");
+            setSaveStateKind("error");
+            return;
+          }
+
+          setSaveState(error instanceof Error ? error.message : String(error));
+          setSaveStateKind("error");
+        });
+
+      return;
+    }
+
     const nextSettings = { ...settings, [key]: value };
-    const installingWhisper = key === "sttProvider" && value === "local-whisper";
     setSettings(nextSettings);
-    setSaveState(installingWhisper ? "Installiere Whisper..." : "Speichere...");
-    setSaveStateKind(installingWhisper ? "installing" : "saving");
+    setSaveState("Speichere...");
+    setSaveStateKind("saving");
     const sideEffect = key === "autostart" ? setAutostart(Boolean(value)) : Promise.resolve();
     sideEffect
       .then(() => saveSettings(nextSettings))
       .then(() => {
-        setSaveState(installingWhisper ? "Gespeichert, Whisper installiert" : "Gespeichert");
+        setSaveState("Gespeichert");
         setSaveStateKind("success");
       })
       .catch((error: unknown) => {
@@ -1212,6 +1323,15 @@ function SettingsWindow() {
               <input type="checkbox" checked={settings.ttsEnabled} onChange={(event) => updateSetting("ttsEnabled", event.target.checked)} />
             </label>
             <label>
+              <span>TTS Backend</span>
+              <select value={settings.ttsBackend} onChange={(event) => updateSetting("ttsBackend", event.target.value)}>
+                <option value="auto">Auto</option>
+                <option value="spd-say">spd-say</option>
+                <option value="espeak-ng">espeak-ng</option>
+                <option value="espeak">espeak</option>
+              </select>
+            </label>
+            <label>
               <span>TTS Stimme</span>
               <input value={settings.ttsVoice} onChange={(event) => updateSetting("ttsVoice", event.target.value)} />
             </label>
@@ -1360,6 +1480,7 @@ function SettingsWindow() {
                 <strong>STT/TTS Runtime</strong>
                 <small>{runtimeDiag?.whisper.message ?? "Whisper-Diagnose nicht verfuegbar"}</small>
                 <small>{runtimeDiag?.tts.message ?? "TTS-Diagnose nicht verfuegbar"}</small>
+                <small>Gewaehltes TTS-Backend: {settings.ttsBackend}</small>
                 <small>Aktives STT-Setting: {runtimeDiag?.sttProvider ?? "unknown"}</small>
                 <small>Aktives Chat-Setting: {runtimeDiag?.chatProvider ?? "unknown"}</small>
               </div>

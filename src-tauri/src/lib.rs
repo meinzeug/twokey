@@ -120,6 +120,16 @@ fn speak_text(text: String) -> Result<String, String> {
 }
 
 #[tauri::command]
+fn install_tts_backend(backend: String, sudo_password: Option<String>) -> Result<String, String> {
+    tts::install_backend(&backend, sudo_password.as_deref())
+}
+
+#[tauri::command]
+fn get_tts_backend_status(backend: String) -> tts::TtsDiagnostics {
+    tts::backend_status(&backend)
+}
+
+#[tauri::command]
 fn insert_text(text: String) -> Result<(), String> {
     desktop::insert_text(&text)
 }
@@ -165,6 +175,11 @@ fn list_providers() -> Vec<provider::ProviderInfo> {
 #[tauri::command]
 fn get_local_whisper_diagnostics() -> stt::LocalWhisperDiagnostics {
     stt::local_whisper_diagnostics()
+}
+
+#[tauri::command]
+fn ensure_local_whisper_runtime(sudo_password: Option<String>) -> Result<String, String> {
+    stt::ensure_local_whisper_runtime(sudo_password.as_deref())
 }
 
 #[tauri::command]
@@ -320,7 +335,7 @@ fn stop_manual_capture(app: AppHandle) -> Result<(), String> {
                     UiHotkeyEvent {
                         kind: "transcript-ready",
                         status: "ready",
-                        message: "Transkription abgeschlossen. Starte KI-Verarbeitung.".to_string(),
+                        message: "Transkription abgeschlossen.".to_string(),
                         audio_path: Some(path.to_string_lossy().to_string()),
                         transcript: Some(transcript.text),
                         provider: Some(transcript.provider),
@@ -374,6 +389,7 @@ pub fn run() {
             list_toolchains,
             list_providers,
             get_local_whisper_diagnostics,
+            ensure_local_whisper_runtime,
             get_runtime_diagnostics,
             open_settings_window,
             provider_api_key_status,
@@ -381,6 +397,8 @@ pub fn run() {
             replace_selected_text,
             save_settings,
             save_toolchains,
+            install_tts_backend,
+            get_tts_backend_status,
             run_toolchain_by_id,
             dry_run_toolchain_by_id,
             run_toolchain_from_text,

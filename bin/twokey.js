@@ -375,6 +375,7 @@ async function ensureRuntimeDependencies() {
   await fs.promises.mkdir(APPIMAGE_DIR, { recursive: true });
   await ensureManagedFfmpeg();
   await ensureManagedWhisperCli();
+  await ensureManagedTtsBackend();
 }
 
 async function ensureManagedFfmpeg() {
@@ -426,6 +427,24 @@ async function ensureManagedWhisperCli() {
   }
 }
 
+async function ensureManagedTtsBackend() {
+  if (await commandExists("spd-say") || await commandExists("espeak-ng") || await commandExists("espeak")) {
+    return;
+  }
+
+  if (!isRoot()) {
+    return;
+  }
+
+  if (await commandExists("apt-get")) {
+    try {
+      await runCommand("apt-get", ["install", "-y", "espeak-ng"]);
+    } catch {
+      // best effort only
+    }
+  }
+}
+
 async function commandExists(name) {
   return new Promise((resolve) => {
     const child = spawn("sh", ["-c", `command -v ${name} >/dev/null 2>&1`], {
@@ -435,6 +454,10 @@ async function commandExists(name) {
     child.on("error", () => resolve(false));
     child.on("close", (code) => resolve(code === 0));
   });
+}
+
+function isRoot() {
+  return typeof process.getuid === "function" && process.getuid() === 0;
 }
 
 async function runCommand(program, commandArgs) {

@@ -314,7 +314,7 @@ fn start_transcription(app: AppHandle, path: std::path::PathBuf) {
             HotkeyEvent {
                 kind: "transcript-ready",
                 status: "ready",
-                message: "Transkription abgeschlossen. Starte KI-Verarbeitung.".to_string(),
+                message: "Transkription abgeschlossen.".to_string(),
                 audio_path: Some(path.to_string_lossy().to_string()),
                 transcript: Some(transcript.text),
                 provider: Some(transcript.provider),
