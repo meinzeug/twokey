@@ -179,6 +179,11 @@ fn list_providers() -> Vec<provider::ProviderInfo> {
 }
 
 #[tauri::command]
+fn list_openrouter_models() -> Result<Vec<provider::OpenRouterModelInfo>, String> {
+    provider::list_openrouter_models()
+}
+
+#[tauri::command]
 fn get_local_whisper_diagnostics() -> stt::LocalWhisperDiagnostics {
     stt::local_whisper_diagnostics()
 }
@@ -394,6 +399,7 @@ pub fn run() {
             insert_text,
             list_toolchains,
             list_providers,
+            list_openrouter_models,
             get_local_whisper_diagnostics,
             ensure_local_whisper_runtime,
             export_debug_report,

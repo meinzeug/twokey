@@ -45,6 +45,7 @@ export type AppSettings = {
   openaiModel: string;
   openrouterBaseUrl: string;
   openrouterModel: string;
+  openrouterModelTier: string;
   preferLocal: boolean;
   saveHistory: boolean;
   logApiRequests: boolean;
@@ -62,6 +63,16 @@ export type ProviderInfo = {
   supportsTts: boolean;
   supportsVision: boolean;
   note: string;
+};
+
+export type OpenRouterModelInfo = {
+  id: string;
+  name: string;
+  description: string;
+  isFree: boolean;
+  contextLength?: number | null;
+  pricingPrompt?: string | null;
+  pricingCompletion?: string | null;
 };
 
 export type FileContext = {
@@ -293,6 +304,7 @@ export async function getSettings(): Promise<AppSettings> {
       openaiModel: "gpt-4o-mini",
       openrouterBaseUrl: "https://openrouter.ai/api/v1",
       openrouterModel: "openai/gpt-4o-mini",
+      openrouterModelTier: "free",
       preferLocal: true,
       saveHistory: true,
       logApiRequests: false,
@@ -326,6 +338,14 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   }
 
   return invoke<ProviderInfo[]>("list_providers");
+}
+
+export async function listOpenRouterModels(): Promise<OpenRouterModelInfo[]> {
+  if (!isTauriRuntime()) {
+    return [];
+  }
+
+  return invoke<OpenRouterModelInfo[]>("list_openrouter_models");
 }
 
 export async function addFileContext(): Promise<FileContext> {

@@ -30,6 +30,7 @@ import {
   installLatestUpdate,
   installTtsBackend,
   insertText,
+  listOpenRouterModels,
   listToolchains,
   listProviders,
   listenForHotkeyEvents,
@@ -54,6 +55,7 @@ import {
   type FileContext,
   type HistoryEntry,
   type LocalWhisperDiagnostics,
+  type OpenRouterModelInfo,
   type ProviderInfo,
   type RuntimeDiagnostics,
   type SecretStatus,
@@ -705,6 +707,8 @@ function SettingsWindow() {
   const [toolchainDryRunResult, setToolchainDryRunResult] = useState<ToolchainDryRun | null>(null);
   const [whisperDiag, setWhisperDiag] = useState<LocalWhisperDiagnostics | null>(null);
   const [runtimeDiag, setRuntimeDiag] = useState<RuntimeDiagnostics | null>(null);
+  const [openRouterModels, setOpenRouterModels] = useState<OpenRouterModelInfo[]>([]);
+  const [openRouterModelsLoading, setOpenRouterModelsLoading] = useState(false);
   const [debugNotes, setDebugNotes] = useState("");
   const settingsSections = [
     { id: "allgemein", label: "Allgemein" },
@@ -819,6 +823,18 @@ function SettingsWindow() {
     return warnings;
   }, [settings, providers, secretStatus, whisperDiag, runtimeDiag]);
 
+  const openRouterFilteredModels = useMemo(() => {
+    if (!settings) {
+      return [] as OpenRouterModelInfo[];
+    }
+
+    if (settings.openrouterModelTier === "paid") {
+      return openRouterModels.filter((model) => !model.isFree);
+    }
+
+    return openRouterModels.filter((model) => model.isFree);
+  }, [openRouterModels, settings]);
+
   const refreshRuntimeDiagnostics = () => {
     setSaveState("Aktualisiere Diagnose...");
     setSaveStateKind("saving");
@@ -833,6 +849,25 @@ function SettingsWindow() {
       .catch((error: unknown) => {
         setSaveState(error instanceof Error ? error.message : String(error));
         setSaveStateKind("error");
+      });
+  };
+
+  const refreshOpenRouterModels = () => {
+    setOpenRouterModelsLoading(true);
+    setSaveState("Lade OpenRouter-Modelle...");
+    setSaveStateKind("saving");
+    listOpenRouterModels()
+      .then((models) => {
+        setOpenRouterModels(models);
+        setSaveState(`OpenRouter-Modelle geladen (${models.length})`);
+        setSaveStateKind("success");
+      })
+      .catch((error: unknown) => {
+        setSaveState(error instanceof Error ? error.message : String(error));
+        setSaveStateKind("error");
+      })
+      .finally(() => {
+        setOpenRouterModelsLoading(false);
       });
   };
 
@@ -1225,6 +1260,10 @@ function SettingsWindow() {
 
           {activeSection === "sprache-ki" && (
           <SettingsGroup title="Sprache und KI">
+            <div className="provider-row">
+              <strong>Spracheingabe (STT)</strong>
+              <small>Konfiguration fuer Mikrofon-Transkription und Edit-Modus.</small>
+            </div>
             <label>
               <span>STT-Anbieter</span>
               <select value={settings.sttProvider} onChange={(event) => updateSetting("sttProvider", event.target.value)}>
@@ -1232,6 +1271,15 @@ function SettingsWindow() {
                 <option value="external-command">Externer Befehl</option>
                 <option value="local-whisper">Lokal Whisper</option>
                 <option value="openai-compatible">OpenAI-kompatibel</option>
+              </select>
+            </label>
+            <label>
+              <span>Sprache</span>
+              <select value={settings.defaultLanguage} onChange={(event) => updateSetting("defaultLanguage", event.target.value)}>
+                <option value="de">Deutsch</option>
+                <option value="en">Englisch</option>
+                <option value="fr">Franzoesisch</option>
+                <option value="es">Spanisch</option>
               </select>
             </label>
             {settings.sttProvider === "local-whisper" && (
@@ -1257,7 +1305,6 @@ function SettingsWindow() {
                   />
                 </label>
                 <div className="provider-row">
-                  <strong>Hinweis</strong>
                   <small>Kleinere Modelle und Beam-Size 1-2 sind schneller. Groessere Modelle und hoehere Beam-Size liefern meist bessere Transkripte, brauchen aber mehr Zeit.</small>
                   <small>{whisperDiag?.message ?? "Diagnose nicht verfuegbar"}</small>
                   <small>Whisper: {whisperDiag?.whisperAvailable ? "bereit" : "fehlt"} | ffmpeg: {whisperDiag?.ffmpegAvailable ? "bereit" : "fehlt"}</small>
@@ -1289,6 +1336,15 @@ function SettingsWindow() {
               <span>Edit-Modus: Direkt ersetzen</span>
               <input type="checkbox" checked={settings.editAutoApply} onChange={(event) => updateSetting("editAutoApply", event.target.checked)} />
             </label>
+
+            <div className="provider-row">
+              <strong>Chat-Provider</strong>
+              <small>Auswahl der KI-Quelle und Modellparameter.</small>
+            </div>
+            <label>
+              <span>Lokal bevorzugen</span>
+              <input type="checkbox" checked={settings.preferLocal} onChange={(event) => updateSetting("preferLocal", event.target.checked)} />
+            </label>
             <label>
               <span>Chat-Provider</span>
               <select value={settings.preferredChatProvider} onChange={(event) => updateSetting("preferredChatProvider", event.target.value)}>
@@ -1301,6 +1357,10 @@ function SettingsWindow() {
               <span>Ollama-Modell</span>
               <input value={settings.ollamaModel} onChange={(event) => updateSetting("ollamaModel", event.target.value)} />
             </label>
+
+            <div className="provider-row">
+              <strong>OpenAI-kompatibel</strong>
+            </div>
             <label>
               <span>OpenAI Base URL</span>
               <input value={settings.openaiBaseUrl} onChange={(event) => updateSetting("openaiBaseUrl", event.target.value)} />
@@ -1309,18 +1369,81 @@ function SettingsWindow() {
               <span>OpenAI Modell</span>
               <input value={settings.openaiModel} onChange={(event) => updateSetting("openaiModel", event.target.value)} />
             </label>
+            <div className="provider-row">
+              <strong>OpenAI API-Key</strong>
+              <span>{secretStatus["openai-compatible"]?.configured ? "gespeichert" : "nicht gesetzt"}</span>
+              <input
+                type="password"
+                placeholder="sk-..."
+                value={apiKeyInputs["openai-compatible"] ?? ""}
+                onChange={(event) =>
+                  setApiKeyInputs((current) => ({ ...current, "openai-compatible": event.target.value }))
+                }
+              />
+              <div className="replacement-actions">
+                <button type="button" onClick={() => saveProviderKey("openai-compatible")}>Speichern</button>
+                <button type="button" onClick={() => removeProviderKey("openai-compatible")}>Loeschen</button>
+              </div>
+            </div>
+
+            <div className="provider-row">
+              <strong>OpenRouter</strong>
+              <small>Live-Modellliste direkt von OpenRouter (free/paid).</small>
+            </div>
             <label>
               <span>OpenRouter Base URL</span>
               <input value={settings.openrouterBaseUrl} onChange={(event) => updateSetting("openrouterBaseUrl", event.target.value)} />
             </label>
             <label>
-              <span>OpenRouter Modell</span>
-              <input value={settings.openrouterModel} onChange={(event) => updateSetting("openrouterModel", event.target.value)} />
+              <span>Modelltyp</span>
+              <select value={settings.openrouterModelTier} onChange={(event) => updateSetting("openrouterModelTier", event.target.value)}>
+                <option value="free">Nur Free-Modelle</option>
+                <option value="paid">Nur Bezahl-Modelle</option>
+              </select>
             </label>
             <label>
-              <span>Lokal bevorzugen</span>
-              <input type="checkbox" checked={settings.preferLocal} onChange={(event) => updateSetting("preferLocal", event.target.checked)} />
+              <span>OpenRouter Modell (Live-Liste)</span>
+              <select value={settings.openrouterModel} onChange={(event) => updateSetting("openrouterModel", event.target.value)}>
+                {openRouterFilteredModels.length === 0 ? (
+                  <option value={settings.openrouterModel}>{openRouterModelsLoading ? "Modelle werden geladen..." : "Keine Modelle geladen"}</option>
+                ) : null}
+                {openRouterFilteredModels.map((model) => (
+                  <option key={model.id} value={model.id}>
+                    {model.name} ({model.id})
+                  </option>
+                ))}
+                {!openRouterFilteredModels.some((model) => model.id === settings.openrouterModel) ? (
+                  <option value={settings.openrouterModel}>Aktuell: {settings.openrouterModel}</option>
+                ) : null}
+              </select>
             </label>
+            <label>
+              <span>OpenRouter Modell (manuell)</span>
+              <input value={settings.openrouterModel} onChange={(event) => updateSetting("openrouterModel", event.target.value)} />
+            </label>
+            <div className="replacement-actions">
+              <button type="button" onClick={refreshOpenRouterModels}>
+                Modellliste aktualisieren
+              </button>
+            </div>
+            <div className="provider-row">
+              <strong>OpenRouter API-Key</strong>
+              <span>{secretStatus.openrouter?.configured ? "gespeichert" : "nicht gesetzt"}</span>
+              <input
+                type="password"
+                placeholder="sk-or-..."
+                value={apiKeyInputs.openrouter ?? ""}
+                onChange={(event) => setApiKeyInputs((current) => ({ ...current, openrouter: event.target.value }))}
+              />
+              <div className="replacement-actions">
+                <button type="button" onClick={() => saveProviderKey("openrouter")}>Speichern</button>
+                <button type="button" onClick={() => removeProviderKey("openrouter")}>Loeschen</button>
+              </div>
+            </div>
+
+            <div className="provider-row">
+              <strong>Textausgabe (TTS)</strong>
+            </div>
             <label>
               <span>TTS aktiv</span>
               <input type="checkbox" checked={settings.ttsEnabled} onChange={(event) => updateSetting("ttsEnabled", event.target.checked)} />
@@ -1349,36 +1472,6 @@ function SettingsWindow() {
                 onChange={(event) => updateSetting("ttsSpeed", Number(event.target.value))}
               />
             </label>
-            <div className="provider-row">
-              <strong>OpenAI API-Key</strong>
-              <span>{secretStatus["openai-compatible"]?.configured ? "gespeichert" : "nicht gesetzt"}</span>
-              <input
-                type="password"
-                placeholder="sk-..."
-                value={apiKeyInputs["openai-compatible"] ?? ""}
-                onChange={(event) =>
-                  setApiKeyInputs((current) => ({ ...current, "openai-compatible": event.target.value }))
-                }
-              />
-              <div className="replacement-actions">
-                <button type="button" onClick={() => saveProviderKey("openai-compatible")}>Speichern</button>
-                <button type="button" onClick={() => removeProviderKey("openai-compatible")}>Loeschen</button>
-              </div>
-            </div>
-            <div className="provider-row">
-              <strong>OpenRouter API-Key</strong>
-              <span>{secretStatus.openrouter?.configured ? "gespeichert" : "nicht gesetzt"}</span>
-              <input
-                type="password"
-                placeholder="sk-or-..."
-                value={apiKeyInputs.openrouter ?? ""}
-                onChange={(event) => setApiKeyInputs((current) => ({ ...current, openrouter: event.target.value }))}
-              />
-              <div className="replacement-actions">
-                <button type="button" onClick={() => saveProviderKey("openrouter")}>Speichern</button>
-                <button type="button" onClick={() => removeProviderKey("openrouter")}>Loeschen</button>
-              </div>
-            </div>
             <div className="provider-list">
               {providers.map((provider) => (
                 <div className="provider-row" key={provider.id}>

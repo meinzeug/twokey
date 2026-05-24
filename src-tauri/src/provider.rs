@@ -82,6 +82,18 @@ pub struct ProviderInfo {
     pub note: String,
 }
 
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpenRouterModelInfo {
+    pub id: String,
+    pub name: String,
+    pub description: String,
+    pub is_free: bool,
+    pub context_length: Option<u64>,
+    pub pricing_prompt: Option<String>,
+    pub pricing_completion: Option<String>,
+}
+
 #[derive(Deserialize)]
 struct OpenAIChatResponse {
     choices: Vec<OpenAIChoice>,
@@ -306,6 +318,95 @@ pub fn list() -> Vec<ProviderInfo> {
             note: "Deterministischer Entwicklungs-Transkribierer.".to_string(),
         },
     ]
+}
+
+pub fn list_openrouter_models() -> Result<Vec<OpenRouterModelInfo>, String> {
+    let app_settings = settings::load().unwrap_or_default();
+    let endpoint = format!("{}/models", app_settings.openrouter_base_url.trim_end_matches('/'));
+
+    let mut request = reqwest::blocking::Client::new()
+        .get(endpoint)
+        .header("Accept", "application/json");
+
+    if let Ok(api_key) = secrets::get_provider_api_key("openrouter") {
+        request = request.header("Authorization", format!("Bearer {api_key}"));
+    }
+
+    let response = request
+        .send()
+        .map_err(|error| format!("OpenRouter-Modelle konnten nicht geladen werden: {error}"))?;
+
+    if !response.status().is_success() {
+        return Err(format!("OpenRouter antwortete mit HTTP {} beim Laden der Modellliste", response.status()));
+    }
+
+    let payload: serde_json::Value = response
+        .json()
+        .map_err(|error| format!("OpenRouter-Modellliste konnte nicht gelesen werden: {error}"))?;
+
+    let mut models: Vec<OpenRouterModelInfo> = payload
+        .get("data")
+        .and_then(|data| data.as_array())
+        .map(|entries| {
+            entries
+                .iter()
+                .filter_map(|entry| {
+                    let id = entry.get("id")?.as_str()?.trim().to_string();
+                    if id.is_empty() {
+                        return None;
+                    }
+
+                    let name = entry
+                        .get("name")
+                        .and_then(|value| value.as_str())
+                        .filter(|value| !value.trim().is_empty())
+                        .unwrap_or(&id)
+                        .to_string();
+
+                    let description = entry
+                        .get("description")
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("")
+                        .to_string();
+
+                    let context_length = entry.get("context_length").and_then(|value| value.as_u64());
+                    let pricing_prompt = entry
+                        .get("pricing")
+                        .and_then(|pricing| pricing.get("prompt"))
+                        .and_then(|value| value.as_str())
+                        .map(|value| value.to_string());
+                    let pricing_completion = entry
+                        .get("pricing")
+                        .and_then(|pricing| pricing.get("completion"))
+                        .and_then(|value| value.as_str())
+                        .map(|value| value.to_string());
+
+                    let prompt_price = price_to_f64(pricing_prompt.as_deref());
+                    let completion_price = price_to_f64(pricing_completion.as_deref());
+                    let is_free = prompt_price <= 0.0 && completion_price <= 0.0;
+
+                    Some(OpenRouterModelInfo {
+                        id,
+                        name,
+                        description,
+                        is_free,
+                        context_length,
+                        pricing_prompt,
+                        pricing_completion,
+                    })
+                })
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+
+    models.sort_by(|left, right| left.name.to_lowercase().cmp(&right.name.to_lowercase()));
+    Ok(models)
+}
+
+fn price_to_f64(value: Option<&str>) -> f64 {
+    value
+        .and_then(|raw| raw.trim().parse::<f64>().ok())
+        .unwrap_or(0.0)
 }
 
 fn chat_via_openai_api(
