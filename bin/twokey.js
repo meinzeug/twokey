@@ -6,7 +6,7 @@ import os from "node:os";
 import path from "node:path";
 import readline from "node:readline";
 
-const VERSION = process.env.npm_package_version || "1.0.8";
+const VERSION = process.env.npm_package_version || "1.0.9";
 const DEFAULT_MODEL = process.env.TWOKEY_OLLAMA_MODEL || "qwen2.5:3b";
 const DEFAULT_OLLAMA_URL = process.env.TWOKEY_OLLAMA_URL || "http://127.0.0.1:11434";
 const LATEST_RELEASE_API = "https://api.github.com/repos/meinzeug/twokey/releases/latest";
@@ -380,12 +380,32 @@ async function ensureUserService(command) {
 
   await fs.promises.writeFile(servicePath, content, "utf8");
 
-  await runSystemctlUser(["daemon-reload"]);
-  await runSystemctlUser(["enable", "--now", "twokey.service"]);
+  try {
+    await runSystemctlUser(["daemon-reload"]);
+    await runSystemctlUser(["enable", "--now", "twokey.service"]);
+  } catch {
+    // Fallback for install contexts where user DBus is not reachable.
+    await enableServiceBySymlink(systemdDir, servicePath);
+  }
 
   if (!QUIET) {
     console.log("TwoKey systemd user service enabled: twokey.service");
   }
+}
+
+async function enableServiceBySymlink(systemdDir, servicePath) {
+  const wantsDir = path.join(systemdDir, "default.target.wants");
+  const wantsLink = path.join(wantsDir, "twokey.service");
+  await fs.promises.mkdir(wantsDir, { recursive: true });
+
+  try {
+    await fs.promises.lstat(wantsLink);
+    await fs.promises.unlink(wantsLink);
+  } catch {
+    // Link does not exist yet.
+  }
+
+  await fs.promises.symlink(servicePath, wantsLink);
 }
 
 async function runSystemctlUser(argsList) {

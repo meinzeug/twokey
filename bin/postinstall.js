@@ -30,7 +30,7 @@ if (isRoot && sudoUser && sudoUser !== "root") {
 
   const delegated = spawn(
     "sudo",
-    ["-u", sudoUser, "-H", process.execPath, cliPath, "--desktop", "--enable-autostart", "--quiet"],
+    ["-u", sudoUser, "-H", process.execPath, cliPath, "--desktop", "--enable-autostart"],
     {
       stdio: "ignore",
       shell: false,
@@ -41,7 +41,7 @@ if (isRoot && sudoUser && sudoUser !== "root") {
   delegated.on("error", () => process.exit(0));
   delegated.on("close", () => process.exit(0));
 } else {
-  const child = spawn(process.execPath, [cliPath, "--desktop", "--enable-autostart", "--quiet"], {
+  const child = spawn(process.execPath, [cliPath, "--desktop", "--enable-autostart"], {
     stdio: "ignore",
     shell: false,
   });
