@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 8: Provider-System.
+Phase 9: Datei-Kontext.
 
 ## Completed
 
@@ -44,6 +44,11 @@ Phase 8: Provider-System.
 - Ollama chat is routed through a provider abstraction.
 - Provider metadata is exposed to the settings UI.
 - OpenAI-compatible and OpenRouter-compatible providers are represented as disabled placeholders.
+- File context can be added from the overlay menu.
+- TXT/MD/JSON/CSV files are read directly.
+- PDF text extraction uses `pdftotext`.
+- Image files are registered as vision-ready metadata.
+- Extracted file text is cached under `~/.cache/twokey-ai/file-contexts/`.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -72,15 +77,17 @@ Phase 8: Provider-System.
 - Wayland text insertion is still unsupported and reported explicitly.
 - Some settings are persisted before all runtime systems consume them.
 - Online provider API-key storage and execution are not implemented yet.
+- Office files are not supported yet.
+- Image files are not analyzed until a vision provider is active.
 - This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 9: Datei-Kontext.
+Phase 10: Packaging.
 
-Planned Phase 9 work:
+Planned Phase 10 work:
 
-- Add file picker.
-- Read TXT/MD context directly.
-- Extract PDF text where `pdftotext` is available.
-- Prepare image files for future vision-capable providers.
+- Harden AppImage and `.deb` metadata.
+- Add desktop launcher details.
+- Add autostart `.desktop` handling.
+- Document install/uninstall flows.

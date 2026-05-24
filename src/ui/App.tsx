@@ -14,6 +14,7 @@ import {
 } from "lucide-react";
 import {
   askOllama,
+  addFileContext,
   getDesktopCapabilities,
   getSettings,
   insertText,
@@ -25,6 +26,7 @@ import {
   saveSettings,
   type AppSettings,
   type DesktopCapabilities,
+  type FileContext,
   type ProviderInfo,
 } from "../utils/tauri";
 
@@ -107,6 +109,7 @@ function OverlayApp() {
   const [lastProvider, setLastProvider] = useState<string | null>(null);
   const [assistantAnswer, setAssistantAnswer] = useState<string | null>(null);
   const [pendingReplacement, setPendingReplacement] = useState<PendingReplacement | null>(null);
+  const [fileContext, setFileContext] = useState<FileContext | null>(null);
   const modeRef = useRef(mode);
   const activeMode = modes[mode];
   const ActiveIcon = activeMode.icon;
@@ -174,7 +177,7 @@ function OverlayApp() {
           setEventMessage("Ollama denkt...");
           setAssistantAnswer(null);
 
-          askOllama(event.transcript)
+          askOllama(buildConversationPrompt(event.transcript, fileContext))
             .then((answer) => {
               if (!mounted) {
                 return;
@@ -344,7 +347,18 @@ function OverlayApp() {
               <Settings size={16} aria-hidden="true" />
               Einstellungen
             </button>
-            <button type="button" disabled>
+            <button
+              type="button"
+              onClick={() => {
+                setEventMessage("Oeffne Dateiauswahl...");
+                addFileContext()
+                  .then((context) => {
+                    setFileContext(context);
+                    setEventMessage(context.summary);
+                  })
+                  .catch((error: unknown) => setEventMessage(error instanceof Error ? error.message : String(error)));
+              }}
+            >
               <FilePlus2 size={16} aria-hidden="true" />
               Datei hinzufügen
             </button>
@@ -374,6 +388,12 @@ function OverlayApp() {
             <div className="answer-box">
               <strong>Antwort</strong>
               <p>{assistantAnswer}</p>
+            </div>
+          ) : null}
+          {fileContext ? (
+            <div className="file-context-box">
+              <strong>{fileContext.name}</strong>
+              <span>{fileContext.summary}</span>
             </div>
           ) : null}
           {pendingReplacement ? (
@@ -413,6 +433,18 @@ function OverlayApp() {
       ) : null}
     </main>
   );
+}
+
+function buildConversationPrompt(transcript: string, context: FileContext | null) {
+  if (!context) {
+    return transcript;
+  }
+
+  const contextText = context.extractedText
+    ? ["Dateikontext:", context.name, context.extractedText].join("\n\n")
+    : ["Dateikontext:", context.name, context.summary, "Diese Datei ist fuer spaetere Vision-Provider vorgemerkt."].join("\n\n");
+
+  return [contextText, "Nutzerfrage:", transcript].join("\n\n");
 }
 
 function SettingsWindow() {

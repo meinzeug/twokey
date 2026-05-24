@@ -108,6 +108,14 @@ Phase 8 provider behavior:
 - Provider metadata is exposed to the settings UI.
 - OpenAI-compatible and OpenRouter-compatible providers are visible as planned online providers, but disabled until API-key storage and routing are implemented.
 
+Phase 9 file context behavior:
+
+- File context can be added from the overlay menu.
+- `txt`, `md`, `markdown`, `json`, and `csv` files are read directly.
+- PDFs are extracted with `pdftotext` from `poppler-utils`.
+- Images are registered as context metadata for future vision providers.
+- Extracted text is cached under `~/.cache/twokey-ai/file-contexts/`.
+
 Build the frontend:
 
 ```bash

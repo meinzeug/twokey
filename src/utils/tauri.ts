@@ -52,6 +52,15 @@ export type ProviderInfo = {
   note: string;
 };
 
+export type FileContext = {
+  path: string;
+  name: string;
+  kind: string;
+  summary: string;
+  extractedText?: string | null;
+  cachePath?: string | null;
+};
+
 export async function getDesktopSessionType(): Promise<string> {
   if (!isTauriRuntime()) {
     return "browser-preview";
@@ -159,6 +168,14 @@ export async function listProviders(): Promise<ProviderInfo[]> {
   }
 
   return invoke<ProviderInfo[]>("list_providers");
+}
+
+export async function addFileContext(): Promise<FileContext> {
+  if (!isTauriRuntime()) {
+    throw new Error("Browser-Vorschau kann keinen nativen Dateidialog oeffnen.");
+  }
+
+  return invoke<FileContext>("add_file_context");
 }
 
 export async function listenForHotkeyEvents(callback: (event: HotkeyEvent) => void): Promise<UnlistenFn | undefined> {

@@ -5,6 +5,7 @@ use tauri::{AppHandle, Manager};
 
 mod audio;
 mod desktop;
+mod file_context;
 mod hotkeys;
 mod ollama;
 mod provider;
@@ -67,6 +68,11 @@ fn list_providers() -> Vec<provider::ProviderInfo> {
     provider::list()
 }
 
+#[tauri::command]
+fn add_file_context() -> Result<file_context::FileContext, String> {
+    file_context::pick_and_load()
+}
+
 pub fn run() {
     tauri::Builder::default()
         .manage(Arc::new(Mutex::new(AudioRecorder::default())))
@@ -76,6 +82,7 @@ pub fn run() {
             Ok(())
         })
         .invoke_handler(tauri::generate_handler![
+            add_file_context,
             ask_ollama,
             get_desktop_capabilities,
             get_desktop_session_type,

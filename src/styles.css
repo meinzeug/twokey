@@ -251,7 +251,8 @@ p {
 
 .transcript-box,
 .answer-box,
-.replacement-box {
+.replacement-box,
+.file-context-box {
   margin-top: 10px;
   border: 1px solid rgba(117, 224, 195, 0.22);
   border-radius: 8px;
@@ -269,9 +270,15 @@ p {
   background: rgba(255, 194, 102, 0.08);
 }
 
+.file-context-box {
+  border-color: rgba(117, 224, 195, 0.25);
+  background: rgba(117, 224, 195, 0.06);
+}
+
 .transcript-box strong,
 .answer-box strong,
-.replacement-box strong {
+.replacement-box strong,
+.file-context-box strong {
   display: block;
   margin-bottom: 6px;
   color: #75e0c3;
@@ -284,6 +291,17 @@ p {
 
 .replacement-box strong {
   color: #ffdfaa;
+}
+
+.file-context-box strong {
+  color: #75e0c3;
+}
+
+.file-context-box span {
+  display: block;
+  color: #a6b3c4;
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .replacement-box small {
