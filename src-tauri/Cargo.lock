@@ -3534,6 +3534,7 @@ dependencies = [
  "serde_json",
  "tauri",
  "tauri-build",
+ "x11",
 ]
 
 [[package]]

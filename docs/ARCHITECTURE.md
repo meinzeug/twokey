@@ -43,7 +43,7 @@ X11 and Wayland will be treated as separate capability profiles.
 - X11: start with clipboard-based selected-text read/replace and keyboard simulation fallbacks.
 - Wayland: detect restrictions, prefer portals where available, and show clear explanations when an action is unavailable.
 
-Phase 1 only detects `XDG_SESSION_TYPE` and displays it in the overlay menu.
+Phase 2 detects `XDG_SESSION_TYPE`, enables the first X11-only hotkey loop, and shows explicit Wayland limitations in the overlay.
 
 ## Data Locations
 
@@ -61,7 +61,7 @@ Future providers should implement:
 - `speak(text, options)`
 - `vision(imageFile, prompt, options)` when supported
 
-## Current Phase 1 Scope
+## Current Scope
 
 Implemented:
 
@@ -70,11 +70,13 @@ Implemented:
 - Settings window placeholder
 - Dummy mode switching
 - Desktop session detection command
+- X11 `Ctrl+Space` hold-hotkey prototype through `XQueryKeymap`
+- Double-tap mode cycle event
+- Escape cancellation event for active recording
+- CLI-backed audio recording prototype using `pw-record`, `parec`, or `arecord`
 
 Not implemented:
 
-- Global hotkeys
-- Audio capture
 - STT/TTS
 - Ollama/OpenAI/OpenRouter providers
 - SQLite storage

@@ -2,7 +2,7 @@
 
 ## Current Phase
 
-Phase 1: Projektstruktur und Dummy-Overlay.
+Phase 2: Global Hotkey + Audioaufnahme.
 
 ## Completed
 
@@ -19,6 +19,12 @@ Phase 1: Projektstruktur und Dummy-Overlay.
 - Desktop session type is detected through the Tauri Rust layer.
 - Native Tauri build verified after installing Linux prerequisites and Rust.
 - AppImage and `.deb` bundle generation verified.
+- X11 `Ctrl+Space` hold detection implemented through `XQueryKeymap`.
+- Double-tap mode cycling implemented for short `Ctrl+Space` taps.
+- Escape cancellation implemented for active recordings.
+- CLI-backed audio recording implemented with `pw-record`, `parec`, or `arecord`.
+- Wayland limitation is detected and surfaced instead of failing silently.
+- X11 synthetic hotkey test with `xdotool` created a WAV recording in `~/.cache/twokey-ai/recordings/`.
 - Initial docs created:
   - `docs/FOUNDATIONS.md`
   - `docs/ARCHITECTURE.md`
@@ -27,29 +33,29 @@ Phase 1: Projektstruktur und Dummy-Overlay.
 
 ## Open Tasks
 
-- Add real global hotkey handling.
-- Add hold-to-record audio capture.
 - Add a helper daemon boundary for desktop automation.
+- Add automated/manual test matrix for X11 and Wayland.
 - Add SQLite settings and history storage.
 - Add provider abstractions.
 - Add file context handling.
 
 ## Known Bugs / Limitations
 
-- Phase 1 has no real hotkeys, audio, AI, text selection, text injection, tray icon, or persistence.
-- Wayland and X11 behavior is only detected, not acted on.
+- No real AI, text selection, text injection, tray icon, or persistence yet.
+- Wayland hotkeys are detected as unsupported; no portal-based fallback exists yet.
 - The overlay position is fixed in configuration and not yet user-persisted.
 - The settings page is a placeholder and does not save values.
 - `git push origin main` is blocked in this shell because HTTPS Git credentials are not configured.
+- STT is not implemented yet, so saved recordings are not transcribed.
+- This developer machine had root-owned `~/.local/share`; ownership was corrected so Tauri can create its XDG data directory.
 
 ## Next Step
 
-Phase 2: globale Hotkeys + Audioaufnahme.
+Phase 3: STT Mock + echtes STT.
 
-Planned Phase 2 work:
+Planned Phase 3 work:
 
-- Define helper daemon responsibilities.
-- Implement global hotkey detection for X11 first.
-- Add Wayland capability detection and user-facing warnings.
-- Add hold-to-record audio plumbing using PipeWire/PulseAudio-compatible APIs or a pragmatic CLI-backed prototype.
-- Update docs with tested desktop limitations.
+- Add a mock transcriber for deterministic development.
+- Add transcript display in the overlay.
+- Wire the recording path from Phase 2 into the transcription pipeline.
+- Plan local Whisper and OpenAI-compatible STT provider interfaces.

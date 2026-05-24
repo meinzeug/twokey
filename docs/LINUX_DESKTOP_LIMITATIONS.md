@@ -4,7 +4,9 @@
 
 X11 allows broad desktop automation. This makes global hotkeys, selected text access, clipboard workflows, and keyboard simulation practical, but also increases security responsibility.
 
-Phase 2 and Phase 6 should implement X11 paths first and audit clipboard restoration carefully.
+Phase 2 implements the first X11 path by polling `XQueryKeymap` for `Ctrl+Space` and `Escape`.
+This is intentionally simple and will be moved behind a helper daemon boundary as the app grows.
+Phase 6 should audit clipboard restoration carefully.
 
 ## Wayland
 
@@ -21,4 +23,5 @@ Possible Wayland routes:
 
 ## Current Phase
 
-Phase 1 only displays the session type from `XDG_SESSION_TYPE`.
+Phase 2 detects Wayland and reports that generic global hold-hotkeys are unavailable.
+It does not silently pretend that Wayland automation works.

@@ -10,8 +10,9 @@ Phase 1 implements the foundation only:
 - Clickable mode menu
 - Placeholder settings window
 - Initial architecture and product documentation
+- X11 Phase 2 prototype: hold `Ctrl+Space` to record audio, double tap `Ctrl+Space` to cycle modes
 
-No real global hotkeys, audio capture, STT, TTS, text injection, or AI provider calls are implemented yet.
+No STT, TTS, text injection, or AI provider calls are implemented yet.
 
 ## Requirements
 
@@ -46,6 +47,15 @@ Run the Linux desktop app:
 ```bash
 npm run tauri:dev
 ```
+
+Phase 2 hotkey behavior on X11:
+
+- Hold `Ctrl+Space`: start recording after a short hold delay.
+- Release `Ctrl+Space`: stop recording and save a WAV file under `~/.cache/twokey-ai/recordings/`.
+- Double tap `Ctrl+Space`: cycle to the next mode.
+- Press `Escape`: cancel an active recording.
+
+On Wayland, generic global hold-hotkeys are reported as unavailable instead of failing silently.
 
 Build the frontend:
 

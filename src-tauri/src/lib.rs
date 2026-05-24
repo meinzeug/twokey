@@ -1,8 +1,19 @@
+use std::sync::{Arc, Mutex};
+
+use audio::AudioRecorder;
 use tauri::{AppHandle, Manager};
+
+mod audio;
+mod hotkeys;
 
 #[tauri::command]
 fn get_desktop_session_type() -> String {
     std::env::var("XDG_SESSION_TYPE").unwrap_or_else(|_| "unknown".to_string())
+}
+
+#[tauri::command]
+fn get_desktop_capabilities() -> hotkeys::DesktopCapabilities {
+    hotkeys::capabilities()
 }
 
 #[tauri::command]
@@ -18,7 +29,13 @@ fn open_settings_window(app: AppHandle) -> Result<(), String> {
 
 pub fn run() {
     tauri::Builder::default()
+        .manage(Arc::new(Mutex::new(AudioRecorder::default())))
+        .setup(|app| {
+            hotkeys::start_hotkey_service(app);
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
+            get_desktop_capabilities,
             get_desktop_session_type,
             open_settings_window
         ])

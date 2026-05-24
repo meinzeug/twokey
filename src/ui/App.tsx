@@ -12,7 +12,7 @@ import {
   ShieldAlert,
   X,
 } from "lucide-react";
-import { getDesktopSessionType, openSettingsWindow } from "../utils/tauri";
+import { getDesktopCapabilities, listenForHotkeyEvents, openSettingsWindow, type DesktopCapabilities } from "../utils/tauri";
 
 type AssistantMode = "conversation" | "edit" | "dictation" | "feedback";
 type AssistantStatus = "ready" | "listening" | "transcribing" | "thinking" | "writing" | "error";
@@ -75,27 +75,68 @@ function OverlayApp() {
   const [mode, setMode] = useState<AssistantMode>("conversation");
   const [status, setStatus] = useState<AssistantStatus>("ready");
   const [menuOpen, setMenuOpen] = useState(false);
-  const [sessionType, setSessionType] = useState("unknown");
+  const [capabilities, setCapabilities] = useState<DesktopCapabilities>({
+    sessionType: "unknown",
+    hotkeysSupported: false,
+    audioSupported: false,
+    automationBackend: "unknown",
+  });
+  const [eventMessage, setEventMessage] = useState("Phase 2 startet Hotkeys und Audioaufnahme.");
+  const [lastAudioPath, setLastAudioPath] = useState<string | null>(null);
   const activeMode = modes[mode];
   const ActiveIcon = activeMode.icon;
 
   useEffect(() => {
     let mounted = true;
 
-    getDesktopSessionType()
+    getDesktopCapabilities()
       .then((value) => {
         if (mounted) {
-          setSessionType(value);
+          setCapabilities(value);
+          setEventMessage(value.warning ?? "Ctrl+Space halten zum Aufnehmen, doppelt tippen zum Moduswechsel.");
         }
       })
       .catch(() => {
         if (mounted) {
-          setSessionType("browser-preview");
+          setEventMessage("Desktop-Fähigkeiten konnten nicht gelesen werden.");
         }
       });
 
     return () => {
       mounted = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let unlisten: Awaited<ReturnType<typeof listenForHotkeyEvents>> | undefined;
+    let mounted = true;
+
+    listenForHotkeyEvents((event) => {
+      if (!mounted) {
+        return;
+      }
+
+      if (event.kind === "mode-cycle") {
+        const modeKeys = Object.keys(modes) as AssistantMode[];
+        setMode((currentMode) => {
+          const currentIndex = modeKeys.indexOf(currentMode);
+          return modeKeys[(currentIndex + 1) % modeKeys.length] ?? "conversation";
+        });
+      }
+
+      setStatus(event.status);
+      setEventMessage(event.message);
+
+      if (event.audioPath) {
+        setLastAudioPath(event.audioPath);
+      }
+    }).then((cleanup) => {
+      unlisten = cleanup;
+    });
+
+    return () => {
+      mounted = false;
+      unlisten?.();
     };
   }, []);
 
@@ -191,10 +232,14 @@ function OverlayApp() {
           <div className="system-note">
             <ShieldAlert size={16} aria-hidden="true" />
             <span>
-              Session: <strong>{sessionType}</strong>. Echte Hotkeys, Audio und Desktop-Automation folgen in Phase 2.
+              Session: <strong>{capabilities.sessionType}</strong>. Backend: <strong>{capabilities.automationBackend}</strong>.
+              Hotkeys: <strong>{capabilities.hotkeysSupported ? "aktiv" : "nicht verfügbar"}</strong>. Audio:{" "}
+              <strong>{capabilities.audioSupported ? "bereit" : "nicht verfügbar"}</strong>.
             </span>
           </div>
 
+          <p className="event-text">{eventMessage}</p>
+          {lastAudioPath ? <p className="path-text">{lastAudioPath}</p> : null}
           <p className="preview-text">{statusPreview}</p>
         </section>
       ) : null}
@@ -234,15 +279,15 @@ function SettingsWindow() {
       <section className="settings-content">
         <div className="settings-title">
           <div>
-            <p className="eyebrow">Phase 1 Platzhalter</p>
-            <h1>Grundlagen sind vorbereitet</h1>
+            <p className="eyebrow">Phase 2 Platzhalter</p>
+            <h1>Hotkeys und Audio werden vorbereitet</h1>
           </div>
           <span>v0.1.0</span>
         </div>
 
         <div className="settings-grid">
           <SettingCard title="Overlay" value="Pille, dunkles Theme, Modusmenü" />
-          <SettingCard title="Hotkeys" value="Geplant für Phase 2 mit X11/Wayland-Prüfung" />
+          <SettingCard title="Hotkeys" value="Ctrl+Space ist der erste X11-Hold-Hotkey. Wayland wird explizit begrenzt gemeldet." />
           <SettingCard title="Provider" value="Ollama und OpenAI-kompatible APIs ab späteren Phasen" />
           <SettingCard title="Datenschutz" value="XDG-Pfade, lokale Defaults und externe Warnungen geplant" />
         </div>

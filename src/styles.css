@@ -233,6 +233,22 @@ p {
   font-size: 13px;
 }
 
+.event-text {
+  margin: 12px 0 0;
+  color: #d9e4f3;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.path-text {
+  margin: 8px 0 0;
+  overflow-wrap: anywhere;
+  color: #75e0c3;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.4;
+}
+
 .settings-shell {
   min-height: 100vh;
   display: grid;
