@@ -3,17 +3,12 @@ use serde::{Deserialize, Serialize};
 use crate::{history, ollama, secrets, settings};
 
 pub trait ChatProvider {
-    fn id(&self) -> &'static str;
     fn chat(&self, prompt: &str, model: &str) -> Result<String, String>;
 }
 
 pub struct OllamaProvider;
 
 impl ChatProvider for OllamaProvider {
-    fn id(&self) -> &'static str {
-        "ollama"
-    }
-
     fn chat(&self, prompt: &str, model: &str) -> Result<String, String> {
         ollama::chat_with_model(prompt, model)
     }
@@ -22,10 +17,6 @@ impl ChatProvider for OllamaProvider {
 pub struct OpenAICompatibleProvider;
 
 impl ChatProvider for OpenAICompatibleProvider {
-    fn id(&self) -> &'static str {
-        "openai-compatible"
-    }
-
     fn chat(&self, prompt: &str, _model: &str) -> Result<String, String> {
         let app_settings = settings::load().unwrap_or_default();
         let api_key = secrets::get_provider_api_key("openai-compatible")?;
@@ -42,10 +33,6 @@ impl ChatProvider for OpenAICompatibleProvider {
 pub struct OpenRouterProvider;
 
 impl ChatProvider for OpenRouterProvider {
-    fn id(&self) -> &'static str {
-        "openrouter"
-    }
-
     fn chat(&self, prompt: &str, _model: &str) -> Result<String, String> {
         let app_settings = settings::load().unwrap_or_default();
         let api_key = secrets::get_provider_api_key("openrouter")?;
